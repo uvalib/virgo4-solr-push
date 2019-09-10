@@ -30,10 +30,10 @@ func main() {
 
 		result, err := svc.ReceiveMessage( &sqs.ReceiveMessageInput{
 			//AttributeNames: []*string{
-			//	aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
+			//	aws.String( sqs.QueueAttributeNameAll ),
 			//},
 			MessageAttributeNames: []*string{
-				aws.String(sqs.QueueAttributeNameAll),
+				aws.String(sqs.QueueAttributeNameAll ),
 			},
 			QueueUrl:            &cfg.QueueUrl,
 			MaxNumberOfMessages: aws.Int64(10),
@@ -49,7 +49,9 @@ func main() {
 
 			for _, m := range result.Messages {
 				log.Printf( "Received %s", *m.Body )
-
+				for k, v := range m.MessageAttributes {
+					log.Printf( "(%s = %s)", k, *v.StringValue )
+				}
 				_, err := svc.DeleteMessage(&sqs.DeleteMessageInput{
 					QueueUrl:      &cfg.QueueUrl,
 					ReceiptHandle: m.ReceiptHandle,
