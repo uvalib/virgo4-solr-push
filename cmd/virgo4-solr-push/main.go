@@ -35,6 +35,13 @@ func main() {
 	}
 
 	queueUrl := result.QueueUrl
+
+	// create the SOLR instance
+	err = NewSolr( cfg.SolrUrl, cfg.CoreName )
+	if err != nil {
+		log.Fatal( err )
+	}
+
     for {
 
 		log.Printf("Waiting for messages...")
@@ -62,10 +69,13 @@ func main() {
 
 			for _, m := range result.Messages {
 
-				//log.Printf( "Received %s", *m.Body )
-				//for k, v := range m.MessageAttributes {
-				//	log.Printf( "(%s = %s)", k, *v.StringValue )
-				//}
+				// add to SOLR
+				err = Solr.Add( *m.Body )
+
+				if err != nil {
+					log.Fatal( err )
+				}
+
 				_, err := svc.DeleteMessage(&sqs.DeleteMessageInput{
 					QueueUrl:      queueUrl,
 					ReceiptHandle: m.ReceiptHandle,
@@ -76,8 +86,18 @@ func main() {
 				}
 			}
 
+			// commit changes
+			err = Solr.Commit( )
+
+			if err != nil {
+				log.Fatal( err )
+			}
 		} else {
 			log.Printf("No messages received...")
 		}
 	}
 }
+
+//
+// end of file
+//
