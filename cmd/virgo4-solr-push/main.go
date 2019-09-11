@@ -24,6 +24,16 @@ func main() {
 
 	svc := sqs.New(sess)
 
+	// get the queue URL from the name
+	result, err := svc.GetQueueUrl( &sqs.GetQueueUrlInput{
+		QueueName: aws.String( cfg.InQueueName ),
+	})
+
+	if err != nil {
+		log.Fatal( err )
+	}
+
+	queueUrl := result.QueueUrl
     for {
 
 		log.Printf("Waiting for messages...")
@@ -35,7 +45,7 @@ func main() {
 			MessageAttributeNames: []*string{
 				aws.String(sqs.QueueAttributeNameAll ),
 			},
-			QueueUrl:            &cfg.QueueUrl,
+			QueueUrl:            queueUrl,
 			MaxNumberOfMessages: aws.Int64(10),
 			WaitTimeSeconds:     aws.Int64( cfg.PollTimeOut ),
 		})
@@ -47,13 +57,16 @@ func main() {
 		// print and then delete
 		if len( result.Messages ) != 0 {
 
+			log.Printf( "Received %d messages", len( result.Messages ) )
+
 			for _, m := range result.Messages {
-				log.Printf( "Received %s", *m.Body )
-				for k, v := range m.MessageAttributes {
-					log.Printf( "(%s = %s)", k, *v.StringValue )
-				}
+
+				//log.Printf( "Received %s", *m.Body )
+				//for k, v := range m.MessageAttributes {
+				//	log.Printf( "(%s = %s)", k, *v.StringValue )
+				//}
 				_, err := svc.DeleteMessage(&sqs.DeleteMessageInput{
-					QueueUrl:      &cfg.QueueUrl,
+					QueueUrl:      queueUrl,
 					ReceiptHandle: m.ReceiptHandle,
 				})
 
