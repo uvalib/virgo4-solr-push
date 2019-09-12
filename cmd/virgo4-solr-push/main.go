@@ -44,6 +44,11 @@ func main() {
 		log.Fatal( err )
 	}
 
+	// for now, commit every 5 minutes or every 500 items
+	var payload bytes.Buffer
+	payload_count := 0
+	last_commit := time.Now()
+
     for {
 
 		//log.Printf("Waiting for messages...")
@@ -67,28 +72,13 @@ func main() {
 		// print and then delete
 		if len( result.Messages ) != 0 {
 
-			//log.Printf( "Received %d messages", len( result.Messages ) )
-			start := time.Now()
-
-			var payload bytes.Buffer
+			log.Printf( "Received %d messages", len( result.Messages ) )
+			//start := time.Now()
 
 			// combine for a single SOLR payload
 			for _, m := range result.Messages {
 			   payload.WriteString( *m.Body )
-			}
-
-			// add to SOLR
-			err = Solr.Add( payload.String( ) )
-
-			if err != nil {
-				log.Fatal( err )
-			}
-
-			// commit the changes
-			err = Solr.Commit( )
-
-			if err != nil {
-				log.Fatal( err )
+			   payload_count++
 			}
 
 			// the delete loop, assume everything worked
@@ -104,12 +94,39 @@ func main() {
 				}
 			}
 
-			duration := time.Since(start)
-			log.Printf("Processed %d records (%0.2f tps)", len( result.Messages ), float64( len( result.Messages ) ) / duration.Seconds() )
-
 		} else {
 			log.Printf("No records available")
 		}
+
+		since_last_commit := time.Since( last_commit )
+		if payload_count >= 1000 || ( payload_count > 0 && since_last_commit.Minutes( ) > 5 ) {
+
+			log.Printf("Sending %d records to SOLR", payload_count )
+			start := time.Now()
+
+			// add to SOLR
+			err = Solr.Add(payload.String())
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// commit the changes
+			err = Solr.Commit()
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			duration := time.Since(start)
+			log.Printf("Processed %d records (%0.2f tps)", payload_count, float64(payload_count)/duration.Seconds())
+
+			// reset the counter and buffer
+			payload.Reset( )
+			payload_count = 0
+			last_commit = time.Now( )
+		}
+
 	}
 }
 
