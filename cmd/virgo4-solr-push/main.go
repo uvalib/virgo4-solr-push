@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"log"
 	"os"
+	"time"
 )
 
 //
@@ -44,7 +46,7 @@ func main() {
 
     for {
 
-		log.Printf("Waiting for messages...")
+		//log.Printf("Waiting for messages...")
 
 		result, err := svc.ReceiveMessage( &sqs.ReceiveMessageInput{
 			//AttributeNames: []*string{
@@ -65,16 +67,32 @@ func main() {
 		// print and then delete
 		if len( result.Messages ) != 0 {
 
-			log.Printf( "Received %d messages", len( result.Messages ) )
+			//log.Printf( "Received %d messages", len( result.Messages ) )
+			start := time.Now()
 
+			var payload bytes.Buffer
+
+			// combine for a single SOLR payload
 			for _, m := range result.Messages {
+			   payload.WriteString( *m.Body )
+			}
 
-				// add to SOLR
-				err = Solr.Add( *m.Body )
+			// add to SOLR
+			err = Solr.Add( payload.String( ) )
 
-				if err != nil {
-					log.Fatal( err )
-				}
+			if err != nil {
+				log.Fatal( err )
+			}
+
+			// commit the changes
+			err = Solr.Commit( )
+
+			if err != nil {
+				log.Fatal( err )
+			}
+
+			// the delete loop, assume everything worked
+			for _, m := range result.Messages {
 
 				_, err := svc.DeleteMessage(&sqs.DeleteMessageInput{
 					QueueUrl:      queueUrl,
@@ -86,14 +104,11 @@ func main() {
 				}
 			}
 
-			// commit changes
-			err = Solr.Commit( )
+			duration := time.Since(start)
+			log.Printf("Processed %d messages (%0.2f tps)", len( result.Messages ), float64( len( result.Messages ) ) / duration.Seconds() )
 
-			if err != nil {
-				log.Fatal( err )
-			}
 		} else {
-			log.Printf("No messages received...")
+			log.Printf("No messages available")
 		}
 	}
 }
