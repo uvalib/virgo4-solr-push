@@ -105,10 +105,10 @@ func main() {
 			}
 
 			duration := time.Since(start)
-			log.Printf("Processed %d messages (%0.2f tps)", len( result.Messages ), float64( len( result.Messages ) ) / duration.Seconds() )
+			log.Printf("Processed %d records (%0.2f tps)", len( result.Messages ), float64( len( result.Messages ) ) / duration.Seconds() )
 
 		} else {
-			log.Printf("No messages available")
+			log.Printf("No records available")
 		}
 	}
 }
