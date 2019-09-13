@@ -44,8 +44,8 @@ func main() {
 		log.Fatal( err )
 	}
 
-	// for now, commit every 5 minutes or every 500 items
 	var payload bytes.Buffer
+	payload.WriteString( "<add>" )
 	payload_count := 0
 	last_commit := time.Now()
 
@@ -62,6 +62,7 @@ func main() {
 			},
 			QueueUrl:            queueUrl,
 			MaxNumberOfMessages: aws.Int64(10),
+//			MaxNumberOfMessages: aws.Int64(1),
 			WaitTimeSeconds:     aws.Int64( cfg.PollTimeOut ),
 		})
 
@@ -72,7 +73,7 @@ func main() {
 		// print and then delete
 		if len( result.Messages ) != 0 {
 
-			log.Printf( "Received %d messages", len( result.Messages ) )
+			//log.Printf( "Received %d messages", len( result.Messages ) )
 			//start := time.Now()
 
 			// combine for a single SOLR payload
@@ -95,12 +96,15 @@ func main() {
 			}
 
 		} else {
-			log.Printf("No records available")
+			log.Printf("No records available (%d pending)", payload_count )
 		}
 
+		// is it time to send the content to SOLR?
 		since_last_commit := time.Since( last_commit )
-		if payload_count >= 1000 || ( payload_count > 0 && since_last_commit.Minutes( ) > 5 ) {
+		if payload_count >= cfg.CommitCount || ( payload_count > 0 && since_last_commit.Seconds( ) >= float64( cfg.CommitTime ) ) {
+//		if payload_count >= 10 || ( payload_count > 0 && since_last_commit.Minutes( ) >= 2  ) {
 
+			payload.WriteString( "</add>" )
 			log.Printf("Sending %d records to SOLR", payload_count )
 			start := time.Now()
 
@@ -123,10 +127,10 @@ func main() {
 
 			// reset the counter and buffer
 			payload.Reset( )
+			payload.WriteString( "<add>" )
 			payload_count = 0
 			last_commit = time.Now( )
 		}
-
 	}
 }
 
