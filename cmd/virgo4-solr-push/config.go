@@ -7,12 +7,12 @@ import (
 
 // ServiceConfig defines all of the service configuration parameters
 type ServiceConfig struct {
-	InQueueName  string
-	SolrUrl      string
-	CoreName     string
-	PollTimeOut  int64
-	CommitCount  int
-	CommitTime   int
+	InQueueName string
+	SolrUrl     string
+	CoreName    string
+	PollTimeOut int64
+	BlockCount  int
+	CommitTime  int
 }
 
 // LoadConfiguration will load the service configuration from env/cmdline
@@ -25,8 +25,8 @@ func LoadConfiguration() *ServiceConfig {
 	flag.StringVar(&cfg.SolrUrl, "solr", "", "SOLR endpoint")
 	flag.StringVar(&cfg.CoreName, "core", "", "SOLR core name")
 	flag.Int64Var(&cfg.PollTimeOut, "pollwait", 15, "Poll wait time (in seconds)")
-	flag.IntVar(&cfg.CommitCount, "commitcount", 250, "Commit block size")
-	flag.IntVar(&cfg.CommitTime, "committime", 180, "Commit block time (in seconds)")
+	flag.IntVar(&cfg.BlockCount, "blockcount", 250, "SOLR send block size")
+	flag.IntVar(&cfg.CommitTime, "committime", 180, "Commit time (in seconds)")
 
 	flag.Parse()
 
@@ -34,7 +34,7 @@ func LoadConfiguration() *ServiceConfig {
 	log.Printf("[CONFIG] SolrUrl              = [%s]", cfg.SolrUrl )
 	log.Printf("[CONFIG] CoreName             = [%s]", cfg.CoreName )
 	log.Printf("[CONFIG] PollTimeOut          = [%d]", cfg.PollTimeOut )
-	log.Printf("[CONFIG] CommitCount          = [%d]", cfg.CommitCount )
+	log.Printf("[CONFIG] BlockCount           = [%d]", cfg.BlockCount)
 	log.Printf("[CONFIG] CommitTime           = [%d]", cfg.CommitTime )
 
 	return &cfg

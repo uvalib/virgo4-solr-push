@@ -44,10 +44,14 @@ func main() {
 		log.Fatal( err )
 	}
 
+	// we write to SOLR in blocks for performance reasons
 	var payload bytes.Buffer
 	payload.WriteString( "<add>" )
 	payload_count := 0
+
+	// we commit to SOLR on a time basis
 	last_commit := time.Now()
+    pending_commit := false
 
     for {
 
@@ -95,14 +99,15 @@ func main() {
 				}
 			}
 
+			// we now have work pending
+			pending_commit = true
+
 		} else {
 			log.Printf("No records available (%d pending)", payload_count )
 		}
 
 		// is it time to send the content to SOLR?
-		since_last_commit := time.Since( last_commit )
-		if payload_count >= cfg.CommitCount || ( payload_count > 0 && since_last_commit.Seconds( ) >= float64( cfg.CommitTime ) ) {
-//		if payload_count >= 10 || ( payload_count > 0 && since_last_commit.Minutes( ) >= 2  ) {
+		if payload_count >= cfg.BlockCount {
 
 			payload.WriteString( "</add>" )
 			log.Printf("Sending %d records to SOLR", payload_count )
@@ -115,13 +120,6 @@ func main() {
 				log.Fatal(err)
 			}
 
-			// commit the changes
-			err = Solr.Commit()
-
-			if err != nil {
-				log.Fatal(err)
-			}
-
 			duration := time.Since(start)
 			log.Printf("Processed %d records (%0.2f tps)", payload_count, float64(payload_count)/duration.Seconds())
 
@@ -129,7 +127,41 @@ func main() {
 			payload.Reset( )
 			payload.WriteString( "<add>" )
 			payload_count = 0
+		}
+
+		// is it time to do a commit
+		since_last_commit := time.Since( last_commit )
+		if pending_commit == true && since_last_commit.Seconds( ) >= float64( cfg.CommitTime ) {
+
+			// do we have a pending block to send
+			if payload_count > 0 {
+
+				payload.WriteString("</add>")
+				log.Printf("Sending %d records to SOLR", payload_count)
+				start := time.Now()
+
+				// add to SOLR
+				err = Solr.Add(payload.String())
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				duration := time.Since(start)
+				log.Printf("Processed %d records (%0.2f tps)", payload_count, float64(payload_count)/duration.Seconds())
+			}
+
+			log.Printf("Committing records" )
+
+			// commit the changes
+			err = Solr.Commit()
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			last_commit = time.Now( )
+			pending_commit = false
 		}
 	}
 }
