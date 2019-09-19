@@ -11,7 +11,7 @@ type ServiceConfig struct {
 	SolrUrl        string
 	CoreName       string
 	PollTimeOut    int64
-	SolrBlockCount int
+	SolrBlockCount uint
 	FlushTime      int
 	CommitTime     int
 }
@@ -26,7 +26,7 @@ func LoadConfiguration() *ServiceConfig {
 	flag.StringVar(&cfg.SolrUrl, "solr", "", "SOLR endpoint")
 	flag.StringVar(&cfg.CoreName, "core", "", "SOLR core name")
 	flag.Int64Var(&cfg.PollTimeOut, "pollwait", 15, "Poll wait time (in seconds)")
-	flag.IntVar(&cfg.SolrBlockCount, "blockcount", 250, "SOLR send block size")
+	flag.UintVar(&cfg.SolrBlockCount, "blockcount", 250, "SOLR send block size")
 	flag.IntVar(&cfg.FlushTime, "flushtime", 30, "Flush time (in seconds)")
 	flag.IntVar(&cfg.CommitTime, "committime", 180, "Commit time (in seconds)")
 

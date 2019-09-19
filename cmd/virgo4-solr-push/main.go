@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"github.com/uvalib/virgo4-sqs-sdk/awssqs"
 )
 
 //
@@ -18,7 +20,7 @@ func main() {
 	cfg := LoadConfiguration()
 
 	// load our AWS_SQS helper object
-	aws, err := NewAwsSqs( AwsSqsConfig{ } )
+	aws, err := awssqs.NewAwsSqs( awssqs.AwsSqsConfig{ } )
 	if err != nil {
 		log.Fatal( err )
 	}
@@ -38,11 +40,11 @@ func main() {
 	// we write to SOLR in blocks for performance reasons
 	var payload bytes.Buffer
 	payload.WriteString( "<add>" )
-	payload_count := 0
+	payload_count := uint( 0 )
 	last_flush := time.Now()
 
 	// we need to keep a list of 'receipt handles' so we can delete from the queue
-	delete_handles := make( []string, 0, cfg.SolrBlockCount+ MAX_SQS_BLOCK_COUNT )
+	delete_handles := make( []string, 0, cfg.SolrBlockCount + awssqs.MAX_SQS_BLOCK_COUNT )
 
 	// we commit to SOLR on a time basis
     solr_dirty := false
@@ -58,7 +60,7 @@ func main() {
 		//log.Printf("Waiting for messages...")
 
 		// wait for a batch of messages
-		messages, err := aws.BatchMessageGet( inQueueHandle, uint( MAX_SQS_BLOCK_COUNT), time.Duration( cfg.PollTimeOut ) * time.Second )
+		messages, err := aws.BatchMessageGet( inQueueHandle, awssqs.MAX_SQS_BLOCK_COUNT, time.Duration( cfg.PollTimeOut ) * time.Second )
 		if err != nil {
 			log.Fatal( err )
 		}
@@ -137,14 +139,14 @@ func main() {
 	}
 }
 
-func batchDelete( aws AWS_SQS, queue QueueHandle, delete_handles []string ) error {
+func batchDelete( aws awssqs.AWS_SQS, queue awssqs.QueueHandle, delete_handles []string ) error {
 
 	count := len( delete_handles )
 	if count == 0 {
 		return nil
 	}
 
-	block := make( []Message, 0, MAX_SQS_BLOCK_COUNT )
+	block := make( []awssqs.Message, 0, awssqs.MAX_SQS_BLOCK_COUNT )
 
 	// the delete loop, assume everything worked
 	for ix, m := range delete_handles {
@@ -152,7 +154,7 @@ func batchDelete( aws AWS_SQS, queue QueueHandle, delete_handles []string ) erro
 		block = append(block, constructMessage( m ) )
 
 		// is it time to send a block of deletes
-		if ix % MAX_SQS_BLOCK_COUNT == MAX_SQS_BLOCK_COUNT - 1 {
+		if uint( ix ) % awssqs.MAX_SQS_BLOCK_COUNT == awssqs.MAX_SQS_BLOCK_COUNT - 1 {
 
 			// delete them all
 			opStatus, err := aws.BatchMessageDelete( queue, block )
@@ -191,9 +193,9 @@ func batchDelete( aws AWS_SQS, queue QueueHandle, delete_handles []string ) erro
 	return nil
 }
 
-func constructMessage( message string ) Message {
+func constructMessage( message string ) awssqs.Message {
 
-	return Message{ DeleteHandle: DeleteHandle( message )}
+	return awssqs.Message{ DeleteHandle: awssqs.DeleteHandle( message )}
 }
 
 //
