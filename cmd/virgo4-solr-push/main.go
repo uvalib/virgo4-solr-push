@@ -14,7 +14,7 @@ import (
 //
 func main() {
 
-	log.Printf("===> %s service staring up <===", os.Args[ 0 ] )
+	log.Printf("===> %s service staring up (version: %s) <===", os.Args[ 0 ], Version( ) )
 
 	// Get config params
 	cfg := LoadConfiguration()
