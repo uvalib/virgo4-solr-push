@@ -1,8 +1,9 @@
 package main
 
 import (
-	"flag"
 	"log"
+	"os"
+	"strconv"
 )
 
 // ServiceConfig defines all of the service configuration parameters
@@ -16,21 +17,52 @@ type ServiceConfig struct {
 	CommitTime     int
 }
 
+func ensureSet(env string) string {
+	val, set := os.LookupEnv(env)
+
+	if set == false {
+		log.Printf("environment variable not set: [%s]", env)
+		os.Exit(1)
+	}
+
+	return val
+}
+
+func ensureSetAndNonEmpty(env string) string {
+	val := ensureSet(env)
+
+	if val == "" {
+		log.Printf("environment variable not set: [%s]", env)
+		os.Exit(1)
+	}
+
+	return val
+}
+
+func envToInt( env string ) int {
+
+	number := ensureSetAndNonEmpty( env )
+	n, err := strconv.Atoi( number )
+	if err != nil {
+
+		os.Exit(1)
+	}
+	return n
+}
+
 // LoadConfiguration will load the service configuration from env/cmdline
 // and return a pointer to it. Any failures are fatal.
 func LoadConfiguration() *ServiceConfig {
 
-	log.Printf("Loading configuration...")
 	var cfg ServiceConfig
-	flag.StringVar(&cfg.InQueueName, "inqueue", "", "Inbound queue name")
-	flag.StringVar(&cfg.SolrUrl, "solr", "", "SOLR endpoint")
-	flag.StringVar(&cfg.CoreName, "core", "", "SOLR core name")
-	flag.Int64Var(&cfg.PollTimeOut, "pollwait", 15, "Poll wait time (in seconds)")
-	flag.UintVar(&cfg.SolrBlockCount, "blockcount", 250, "SOLR send block size")
-	flag.IntVar(&cfg.FlushTime, "flushtime", 30, "Flush time (in seconds)")
-	flag.IntVar(&cfg.CommitTime, "committime", 180, "Commit time (in seconds)")
 
-	flag.Parse()
+	cfg.InQueueName = ensureSetAndNonEmpty( "VIRGO4_SOLR_PUSH_IN_QUEUE" )
+	cfg.SolrUrl = ensureSetAndNonEmpty( "VIRGO4_SOLR_PUSH_SOLR_URL" )
+	cfg.CoreName = ensureSetAndNonEmpty( "VIRGO4_SOLR_PUSH_SOLR_CORE" )
+	cfg.PollTimeOut = int64( envToInt( "VIRGO4_SOLR_PUSH_QUEUE_POLL_TIMEOUT" ) )
+	cfg.SolrBlockCount = uint( envToInt( "VIRGO4_SOLR_PUSH_SOLR_BLOCK_COUNT" ) )
+	cfg.FlushTime = envToInt( "VIRGO4_SOLR_PUSH_SOLR_FLUSH_TIME" )
+	cfg.CommitTime = envToInt( "VIRGO4_SOLR_PUSH_SOLR_COMMIT_TIME" )
 
 	log.Printf("[CONFIG] InQueueName          = [%s]", cfg.InQueueName )
 	log.Printf("[CONFIG] SolrUrl              = [%s]", cfg.SolrUrl )
