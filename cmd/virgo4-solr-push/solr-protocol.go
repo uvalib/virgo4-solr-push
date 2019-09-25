@@ -1,57 +1,33 @@
 package main
 
 import (
-	//"errors"
-	//"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"strings"
 
-	//"net/http"
-	"time"
-
 	"github.com/parnurzeal/gorequest"
 	"github.com/antchfx/xmlquery"
-
-	//"log"
 )
 
-// this is our implementation
-type solrImpl struct {
-	url       string
-	httpDebug bool
-}
+func ( s * solrImpl ) protocolCommit( ) error {
 
-// Initialize our SOLR connection
-func newSolr( solrUrl string, core string ) ( SOLR, error ) {
+	body, err := s.httpPost( "<commit/>" )
 
-	return &solrImpl{ url: fmt.Sprintf( "%s/%s/update", solrUrl, core ) }, nil
-}
-
-func ( s * solrImpl ) Check( ) error {
-	//_, _, err := s.si.Ping()
-	return nil
-}
-
-func ( s * solrImpl ) Commit( ) error {
-
-	body, errs := s.httpPost( "<commit/>" )
-
-	if errs != nil {
-	   log.Fatal( errs )
+	if err != nil {
+	   return err
 	}
 
 	// do stuff with body
 	doc, err := xmlquery.Parse( strings.NewReader( body ) )
 	if err != nil {
-		log.Fatal( err )
+		return err
 	}
 
 	status := xmlquery.FindOne( doc, "//response/lst[@name='responseHeader']/int[@name='status']")
 	if status == nil {
-		log.Fatal( "Cannot find status field in response payload (%s)", body )
+		return fmt.Errorf( "Cannot find status field in response payload (%s)", body )
 	}
 
 	if status.InnerText( ) != "0" {
@@ -63,49 +39,53 @@ func ( s * solrImpl ) Commit( ) error {
 	return nil
 }
 
-func ( s * solrImpl ) Add( data string ) error {
+func ( s * solrImpl ) protocolAdd( builder strings.Builder ) error {
 
-	body, errs := s.httpPost( data )
+	body, err := s.httpPost( builder.String( ) )
 
-	if errs != nil {
-		log.Fatal( errs )
+	if err != nil {
+		return err
 	}
 
-	// do stuff with body
+	// look for the response
 
 	doc, err := xmlquery.Parse( strings.NewReader( body ) )
 	if err != nil {
-		log.Fatal( err )
+		return err
 	}
 
 	status := xmlquery.FindOne( doc, "//response/lst[@name='responseHeader']/int[@name='status']")
     if status == nil {
-		log.Fatal( "Cannot find status field in response payload (%s)", body )
+		return fmt.Errorf( "Cannot find status field in response payload (%s)", body )
 	}
 
 	if status.InnerText( ) != "0" {
-		log.Printf( body )
-		return fmt.Errorf( "SOLR response status = %s", status.InnerText( ) )
+
+		message := xmlquery.FindOne( doc, "//response/lst[@name='error']/str[@name='msg']")
+		if message != nil {
+			return fmt.Errorf( "%s", message.InnerText( ) )
+		}
+		return fmt.Errorf( "status: %s (body %s)", status.InnerText( ), body )
 	}
 
 	return nil
 }
 
-func ( s * solrImpl ) httpPost( payload string ) ( string, []error ){
+func ( s * solrImpl ) httpPost( payload string ) ( string, error ){
 
 	//fmt.Printf( "%s\n", s.url )
 
 	resp, body, errs := gorequest.New().
-		SetDebug( s.httpDebug ).
-		Post( s.url ).
+		SetDebug( s.CommsDebug ).
+		Post( s.PostUrl ).
 		Send( payload ).
-		Timeout(time.Duration( 600 ) * time.Second).
+		Timeout( s.Config.RequestTimeout ).
 		Set( "Content-Type", "application/xml" ).
 		Set( "Accept", "application/json" ).
 		End()
 
 	if errs != nil {
-		return "", errs
+		return "", errs[ 0 ]
 	}
 
 	defer io.Copy(ioutil.Discard, resp.Body)
