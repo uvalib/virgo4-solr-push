@@ -10,6 +10,10 @@ func ( s * solrImpl ) BufferDoc( doc []byte ) error {
    // if we have not yet added any documents
    if s.pendingAdds == 0 {
       s.addBuffer.WriteString( "<add>" )
+
+      // we are only interested in tracking the time for the last add after the first document is actually
+      // added to the buffer
+      s.lastAdd = time.Now( )
    }
 
    // add the document and update the document count
@@ -73,6 +77,11 @@ func ( s * solrImpl ) ForceAdd( ) error {
    }
 
    log.Printf("Worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds( ) )
+
+   // only start timing for a SOLR commit after SOLR becomes dirty
+   if s.solrDirty == false {
+      s.lastCommit = time.Now( )
+   }
 
    // update state variables
    s.solrDirty = true
