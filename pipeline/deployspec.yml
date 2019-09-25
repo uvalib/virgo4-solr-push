@@ -24,7 +24,7 @@ phases:
 
   build:
     commands:
-      - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/search-ws
+      - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-solr-push
       - terraform init
       - terraform apply -auto-approve -var container_tag=$latest_build
 
