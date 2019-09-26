@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,7 +10,7 @@ import (
 	//"log"
 	"regexp"
 	"strconv"
-	"strings"
+	//"strings"
 
 	"github.com/parnurzeal/gorequest"
 	"github.com/antchfx/xmlquery"
@@ -19,7 +20,7 @@ var documentAddFailed = fmt.Errorf( "SOLR add failed" )
 
 func ( s * solrImpl ) protocolCommit( ) error {
 
-	body, err := s.httpPost( "<commit/>" )
+	body, err := s.httpPost( []byte( "<commit/>" ) )
 	if err != nil {
 	   return err
 	}
@@ -33,9 +34,9 @@ func ( s * solrImpl ) protocolCommit( ) error {
 	return nil
 }
 
-func ( s * solrImpl ) protocolAdd( builder strings.Builder ) error {
+func ( s * solrImpl ) protocolAdd( buffer []byte ) error {
 
-	body, err := s.httpPost( builder.String( ) )
+	body, err := s.httpPost( buffer )
 	if err != nil {
 		return err
 	}
@@ -56,21 +57,21 @@ func ( s * solrImpl ) protocolAdd( builder strings.Builder ) error {
 	return nil
 }
 
-func ( s * solrImpl ) httpPost( payload string ) ( string, error ){
+func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 
 	//fmt.Printf( "%s\n", s.url )
 
 	resp, body, errs := gorequest.New().
 		SetDebug( s.CommsDebug ).
 		Post( s.PostUrl ).
-		Send( payload ).
+		Send( string( buffer ) ).
 		Timeout( s.Config.RequestTimeout ).
 		Set( "Content-Type", "application/xml" ).
 		Set( "Accept", "application/json" ).
-		End()
+		EndBytes()
 
 	if errs != nil {
-		return "", errs[ 0 ]
+		return nil, errs[ 0 ]
 	}
 
 	defer io.Copy(ioutil.Discard, resp.Body)
@@ -80,10 +81,10 @@ func ( s * solrImpl ) httpPost( payload string ) ( string, error ){
     return body, nil
 }
 
-func ( s * solrImpl ) processResponsePayload( body string ) ( int, int, error ) {
+func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, int, error ) {
 
 	// generate a query structure from the body
-	doc, err := xmlquery.Parse( strings.NewReader( body ) )
+	doc, err := xmlquery.Parse( bytes.NewReader( body ) )
 	if err != nil {
 		return 0, 0, err
 	}
@@ -107,6 +108,7 @@ func ( s * solrImpl ) processResponsePayload( body string ) ( int, int, error ) 
 			re := regexp.MustCompile(`\[(\d+),\d+\]`)
 			match := re.FindStringSubmatch( messageNode.InnerText( ) )
 			if match != nil {
+				fmt.Printf( "%s", body )
 				docix, _ := strconv.Atoi( match[ 1 ] )
 				return status, docix, documentAddFailed
 			}

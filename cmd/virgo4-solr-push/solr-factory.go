@@ -3,7 +3,6 @@ package main
 import (
    //"fmt"
    "fmt"
-   "strings"
    "time"
 )
 
@@ -20,7 +19,7 @@ type solrImpl struct {
    lastAdd     time.Time         // when we did our last add to SOLR
    solrDirty   bool              // we have added documents to SOLR without committing
    pendingAdds uint              // how many documents in the add buffer
-   addBuffer   strings.Builder   // our document add buffer
+   addBuffer   []byte            // our document add buffer
 
    workerId    int               // used for logging
 }
@@ -35,6 +34,8 @@ func newSolr( id int, config SolrConfig ) ( SOLR, error ) {
    // cos zero values are not correct
    impl.lastCommit = time.Now( )
    impl.lastAdd = time.Now( )
+
+   impl.addBuffer = make( []byte, 0, 1024 * 1024 )
 
    return impl, impl.IsAlive( )
 }

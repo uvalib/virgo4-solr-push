@@ -9,7 +9,7 @@ func ( s * solrImpl ) BufferDoc( doc []byte ) error {
 
    // if we have not yet added any documents
    if s.pendingAdds == 0 {
-      s.addBuffer.WriteString( "<add>" )
+      s.addBuffer = append( s.addBuffer, []byte( "<add>" )... )
 
       // we are only interested in tracking the time for the last add after the first document is actually
       // added to the buffer
@@ -17,7 +17,7 @@ func ( s * solrImpl ) BufferDoc( doc []byte ) error {
    }
 
    // add the document and update the document count
-   s.addBuffer.Write( doc )
+   s.addBuffer = append( s.addBuffer, doc... )
    s.pendingAdds++
 
    return nil
@@ -64,7 +64,7 @@ func ( s * solrImpl ) ForceAdd( ) error {
       return nil
    }
 
-   s.addBuffer.WriteString( "</add>" )
+   s.addBuffer = append( s.addBuffer, []byte( "</add>" )... )
    //log.Printf("Worker %d: sending %d documents to SOLR", s.workerId, s.pendingAdds )
 
    // add to SOLR
@@ -85,7 +85,7 @@ func ( s * solrImpl ) ForceAdd( ) error {
 
    // update state variables
    s.solrDirty = true
-   s.addBuffer.Reset( )
+   s.addBuffer = s.addBuffer[:0]
    s.pendingAdds = 0
    s.lastAdd = time.Now( )
 
