@@ -23,9 +23,7 @@ func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Qu
 
    // and our SOLR instance
    solr, err := NewSolr( id, solrConfig )
-   if err != nil {
-      log.Fatal( err )
-   }
+   fatalIfError( err )
 
    // keep a list of the messages queued so we can delete them once they are sent to SOLR
    queued := make( []awssqs.Message, 0, config.SolrBlockCount )
@@ -49,9 +47,7 @@ func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Qu
 
          // buffer it to SOLR
          err = solr.BufferDoc( []byte( message.Payload ) )
-         if err != nil {
-            log.Fatal( err )
-         }
+         fatalIfError( err )
 
          // add it to the queued list
          queued = append( queued, message )
@@ -62,15 +58,11 @@ func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Qu
 
          // add them
          err = solr.ForceAdd( )
-         if err != nil {
-            log.Fatal( err )
-         }
+         fatalIfError( err )
 
          // and do a batch delete
          err = batchDelete( id, aws, queue, queued )
-         if err != nil {
-            log.Fatal( err )
-         }
+         fatalIfError( err )
 
          queued = queued[:0]
       }
@@ -78,9 +70,7 @@ func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Qu
       // is it time to send a commit to SOLR
       if solr.IsTimeToCommit( ) == true {
          err = solr.ForceCommit( )
-         if err != nil {
-            log.Fatal( err )
-         }
+         fatalIfError( err )
       }
    }
 }

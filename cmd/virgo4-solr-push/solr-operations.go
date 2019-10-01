@@ -51,6 +51,11 @@ func ( s * solrImpl ) IsTimeToCommit( ) bool {
       return false
    }
 
+   // if our commit time is zero, it means that client committing is disabled
+   if s.Config.CommitTime.Seconds() == 0 {
+      return false
+   }
+
    //
    // its time to commit if we have not committed in the configured number of seconds
    //
