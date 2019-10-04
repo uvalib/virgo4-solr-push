@@ -8,18 +8,19 @@ import (
 
 // ServiceConfig defines all of the service configuration parameters
 type ServiceConfig struct {
-	InQueueName     string // SQS queue name for inbound documents
-	PollTimeOut     int64  // the SQS queue timeout (in seconds)
+	InQueueName       string   // SQS queue name for inbound documents
+	PollTimeOut       int64    // the SQS queue timeout (in seconds)
+	MessageBucketName string   // the bucket to use for large messages
 
-	SolrUrl        string  // the SOLR endpoint URL
-	SolrCoreName   string  // the SOLR core name
-	SolrTimeout    int     // the http timeout (in seconds)
-	SolrBlockCount uint    // the maximum number of Solr AddDocs in a buffer sent to SOLR
-	SolrFlushTime  int     // how often to flush the AddDocs buffer
-	SolrCommitTime int     // how often to do a SOLR commit if dirty (in seconds)
+	SolrUrl           string   // the SOLR endpoint URL
+	SolrCoreName      string   // the SOLR core name
+	SolrTimeout       int      // the http timeout (in seconds)
+	SolrBlockCount    uint     // the maximum number of Solr AddDocs in a buffer sent to SOLR
+	SolrFlushTime     int      // how often to flush the AddDocs buffer
+	SolrCommitTime    int      // how often to do a SOLR commit if dirty (in seconds)
 
-	WorkerQueueSize int    // the inbound message queue size to feed the workers
-	Workers         int    // the number of worker processes
+	WorkerQueueSize   int      // the inbound message queue size to feed the workers
+	Workers           int      // the number of worker processes
 }
 
 func ensureSet(env string) string {
@@ -63,6 +64,7 @@ func LoadConfiguration() *ServiceConfig {
 
 	cfg.InQueueName = ensureSetAndNonEmpty( "VIRGO4_SOLR_PUSH_IN_QUEUE" )
 	cfg.PollTimeOut = int64( envToInt( "VIRGO4_SOLR_PUSH_QUEUE_POLL_TIMEOUT" ) )
+	cfg.MessageBucketName = ensureSetAndNonEmpty( "VIRGO4_SQS_MESSAGE_BUCKET" )
 
 	cfg.SolrUrl = ensureSetAndNonEmpty( "VIRGO4_SOLR_PUSH_SOLR_URL" )
 	cfg.SolrCoreName = ensureSetAndNonEmpty( "VIRGO4_SOLR_PUSH_SOLR_CORE" )
@@ -75,6 +77,7 @@ func LoadConfiguration() *ServiceConfig {
 
 	log.Printf("[CONFIG] InQueueName          = [%s]", cfg.InQueueName )
 	log.Printf("[CONFIG] PollTimeOut          = [%d]", cfg.PollTimeOut )
+	log.Printf("[CONFIG] MessageBucketName    = [%s]", cfg.MessageBucketName )
 
 	log.Printf("[CONFIG] SolrUrl              = [%s]", cfg.SolrUrl )
 	log.Printf("[CONFIG] SolrCoreName         = [%s]", cfg.SolrCoreName)

@@ -19,7 +19,7 @@ func main() {
 	cfg := LoadConfiguration()
 
 	// load our AWS_SQS helper object
-	aws, err := awssqs.NewAwsSqs( awssqs.AwsSqsConfig{ } )
+	aws, err := awssqs.NewAwsSqs( awssqs.AwsSqsConfig{ MessageBucketName: cfg.MessageBucketName } )
     fatalIfError( err )
 
 	// get the queue handle from the queue name
