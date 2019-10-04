@@ -101,16 +101,9 @@ func batchDelete( id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages
       //log.Printf( "Deleting slice [%d:%d]", start, end )
 
       // and delete them
-      opStatus, err := aws.BatchMessageDelete( queue, messages[ start:end ] )
+      err := blockDelete( aws, queue, messages[ start:end ] )
       if err != nil {
          return err
-      }
-
-      // check the operation results
-      for ix, op := range opStatus {
-         if op == false {
-            log.Printf( "WARNING: message %d failed to delete", ix )
-         }
       }
    }
 
@@ -124,21 +117,57 @@ func batchDelete( id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages
       //log.Printf( "Deleting slice [%d:%d]", start, end )
 
       // and delete them
-      opStatus, err := aws.BatchMessageDelete( queue, messages[ start:end ] )
+      err := blockDelete( aws, queue, messages[ start:end ] )
       if err != nil {
          return err
-      }
-
-      // check the operation results
-      for ix, op := range opStatus {
-         if op == false {
-            log.Printf( "WARNING: message %d failed to delete", ix )
-         }
       }
    }
 
    duration := time.Since( start )
    log.Printf("Worker %d: batch delete completed in %0.2f seconds", id, duration.Seconds( ) )
+
+   return nil
+}
+
+func blockDelete( aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message ) error {
+
+   // delete the block
+   opStatus, err := aws.BatchMessageDelete( queue, messages )
+   if err != nil {
+      if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
+         return err
+      }
+   }
+
+   // if one or more message failed to delete, retry...
+   if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
+      retryMessages := make( []awssqs.Message, 0, awssqs.MAX_SQS_BLOCK_COUNT )
+
+      // check the operation results
+      for ix, op := range opStatus {
+         if op == false {
+            log.Printf("WARNING: message %d failed to delete, retrying", ix)
+            retryMessages = append( retryMessages, messages[ ix ] )
+         }
+      }
+
+      // attempt another send of the ones that failed last time
+      opStatus, err = aws.BatchMessagePut( queue, retryMessages )
+      if err != nil {
+         if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
+            return err
+         }
+      }
+
+      // did we fail again
+      if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
+         for ix, op := range opStatus {
+            if op == false {
+               log.Printf("ERROR: message %d failed to delete, giving up", ix)
+            }
+         }
+      }
+   }
 
    return nil
 }
