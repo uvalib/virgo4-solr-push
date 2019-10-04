@@ -71,6 +71,7 @@ func ( s * solrImpl ) ForceAdd( ) error {
 
    s.addBuffer = append( s.addBuffer, []byte( "</add>" )... )
    //log.Printf("Worker %d: sending %d documents to SOLR", s.workerId, s.pendingAdds )
+   log.Printf("Worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len( s.addBuffer ) )
 
    // add to SOLR
    start := time.Now()

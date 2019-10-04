@@ -46,7 +46,7 @@ func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Qu
       if arrived == true {
 
          // buffer it to SOLR
-         err = solr.BufferDoc( []byte( message.Payload ) )
+         err = solr.BufferDoc( message.Payload )
          fatalIfError( err )
 
          // add it to the queued list

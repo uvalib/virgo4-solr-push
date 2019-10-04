@@ -3,16 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 
-	//"log"
 	"regexp"
 	"strconv"
-	//"strings"
 
-	"github.com/parnurzeal/gorequest"
 	"github.com/antchfx/xmlquery"
 )
 
@@ -61,24 +58,28 @@ func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 
 	//fmt.Printf( "%s\n", s.url )
 
-	resp, body, errs := gorequest.New().
-		SetDebug( s.CommsDebug ).
-		Post( s.PostUrl ).
-		Send( string( buffer ) ).
-		Timeout( s.Config.RequestTimeout ).
-		Set( "Content-Type", "application/xml" ).
-		Set( "Accept", "application/json" ).
-		EndBytes()
-
-	if errs != nil {
-		return nil, errs[ 0 ]
+	req, err := http.NewRequest("POST", s.PostUrl, bytes.NewBuffer( buffer ) )
+	if err != nil {
+		return nil, err
 	}
 
-	defer io.Copy(ioutil.Discard, resp.Body)
-	defer resp.Body.Close()
+	req.Header.Set("Content-Type", "application/xml" )
+	//req.Header.Set("Accept", "application/json" )
+
+	response, err := s.httpClient.Do( req )
+	if err != nil {
+		return nil, err
+	}
+
+	defer response.Body.Close()
+
+	body, err := ioutil.ReadAll( response.Body )
+	if err != nil {
+		return nil, err
+	}
 
 	//log.Printf( body )
-    return body, nil
+	return body, nil
 }
 
 func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, int, error ) {

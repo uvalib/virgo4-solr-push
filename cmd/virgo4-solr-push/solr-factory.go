@@ -3,6 +3,7 @@ package main
 import (
    //"fmt"
    "fmt"
+   "net/http"
    "time"
 )
 
@@ -22,6 +23,8 @@ type solrImpl struct {
    addBuffer   []byte            // our document add buffer
 
    workerId    int               // used for logging
+
+   httpClient * http.Client      // our http client connection
 }
 
 // Initialize our SOLR implementation
@@ -35,7 +38,15 @@ func newSolr( id int, config SolrConfig ) ( SOLR, error ) {
    impl.lastCommit = time.Now( )
    impl.lastAdd = time.Now( )
 
-   impl.addBuffer = make( []byte, 0, 1024 * 1024 )
+   impl.addBuffer = make( []byte, 0, 1024 * 1024 * 64 )
+
+   // configure the client
+   impl.httpClient = &http.Client {
+      Transport: &http.Transport{
+         MaxIdleConnsPerHost: 5,
+      },
+      Timeout: config.RequestTimeout * time.Second,
+   }
 
    return impl, impl.IsAlive( )
 }
