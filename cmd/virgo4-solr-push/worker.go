@@ -57,14 +57,49 @@ func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Qu
       if solr.IsTimeToAdd( ) == true {
 
          // add them
-         err = solr.ForceAdd( )
-         fatalIfError( err )
+         failedIx, err := solr.ForceAdd( )
+         if err != nil && err != documentAddFailed {
+            fatalIfError(err)
+         }
 
-         // and do a batch delete
-         err = batchDelete( id, aws, queue, queued )
-         fatalIfError( err )
+         // one of the documents failed to add
+         if err == documentAddFailed {
 
-         queued = queued[:0]
+            // how many do we have total
+            sz := uint(len(queued))
+
+            // if the failure document was not the last one
+            if failedIx < sz {
+
+               log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
+                  failedIx - 1, failedIx, failedIx + 1, sz )
+
+               // delete the ones that succeeded
+               err = batchDelete(id, aws, queue, queued[ 0:failedIx ])
+               fatalIfError(err)
+
+               // ignore the one that failed and keep the remainder for the next
+               queued = queued[failedIx+1:]
+
+            } else {
+               log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
+
+               // delete all but the last of them of them
+               err = batchDelete(id, aws, queue, queued[0:sz] )
+               fatalIfError(err)
+
+               // clear the queue
+               queued = queued[:0]
+            }
+         } else {
+
+            // delete all of them
+            err = batchDelete(id, aws, queue, queued )
+            fatalIfError(err)
+
+            // clear the queue
+            queued = queued[:0]
+         }
       }
 
       // is it time to send a commit to SOLR

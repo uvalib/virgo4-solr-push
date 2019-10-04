@@ -62,11 +62,11 @@ func ( s * solrImpl ) IsTimeToCommit( ) bool {
    return time.Since(s.lastCommit).Seconds() > s.Config.CommitTime.Seconds()
 }
 
-func ( s * solrImpl ) ForceAdd( ) error {
+func ( s * solrImpl ) ForceAdd( ) ( uint, error ) {
 
    // nothing to add
    if s.pendingAdds == 0 {
-      return nil
+      return 0, nil
    }
 
    s.addBuffer = append( s.addBuffer, []byte( "</add>" )... )
@@ -75,13 +75,14 @@ func ( s * solrImpl ) ForceAdd( ) error {
 
    // add to SOLR
    start := time.Now()
-   err := s.protocolAdd( s.addBuffer )
-   duration := time.Since( start )
+   failedIx, err := s.protocolAdd( s.addBuffer )
 
-   if err != nil {
-      return err
+   // fatal error
+   if err != nil && err != documentAddFailed {
+      return 0, err
    }
 
+   duration := time.Since( start )
    log.Printf("Worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds( ) )
 
    // only start timing for a SOLR commit after SOLR becomes dirty
@@ -95,7 +96,7 @@ func ( s * solrImpl ) ForceAdd( ) error {
    s.pendingAdds = 0
    s.lastAdd = time.Now( )
 
-   return nil
+   return failedIx, err
 }
 
 func ( s * solrImpl ) ForceCommit( ) error {

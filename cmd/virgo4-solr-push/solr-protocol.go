@@ -31,27 +31,28 @@ func ( s * solrImpl ) protocolCommit( ) error {
 	return nil
 }
 
-func ( s * solrImpl ) protocolAdd( buffer []byte ) error {
+func ( s * solrImpl ) protocolAdd( buffer []byte ) ( uint, error ) {
 
 	body, err := s.httpPost( buffer )
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	_, docix, err := s.processResponsePayload( body )
+	_, docIx, err := s.processResponsePayload( body )
 	if err != nil {
+
+		// one of the documents in the add list failed
 		if err == documentAddFailed {
-
 			// special case here...
-			log.Printf("ERROR: adds after document %d FAILED (ignoring for now)", docix )
-
-			return nil
+			log.Printf("ERROR: add document at index %d FAILED", docIx )
+			return docIx, err
 		}
 
-		return err
+		return 0, err
 	}
 
-	return nil
+	// all good
+	return 0, nil
 }
 
 func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
@@ -82,7 +83,7 @@ func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 	return body, nil
 }
 
-func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, int, error ) {
+func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, uint, error ) {
 
 	// generate a query structure from the body
 	doc, err := xmlquery.Parse( bytes.NewReader( body ) )
@@ -110,8 +111,10 @@ func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, int, error ) 
 			match := re.FindStringSubmatch( messageNode.InnerText( ) )
 			if match != nil {
 				fmt.Printf( "%s", body )
-				docix, _ := strconv.Atoi( match[ 1 ] )
-				return status, docix, documentAddFailed
+				docnum, _ := strconv.Atoi( match[ 1 ] )
+
+				// return index of failing item
+				return status, uint( docnum ) - 1, documentAddFailed
 			}
 		}
 		return status, 0, fmt.Errorf( "%s", body )
