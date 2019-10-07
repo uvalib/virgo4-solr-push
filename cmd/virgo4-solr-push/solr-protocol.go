@@ -6,12 +6,17 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"regexp"
 	"strconv"
 
 	"github.com/antchfx/xmlquery"
 )
+
+var maxHttpRetries = 3
+var retrySleepTime = 100 * time.Millisecond
 
 var documentAddFailed = fmt.Errorf( "SOLR add failed" )
 
@@ -67,9 +72,29 @@ func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 	req.Header.Set("Content-Type", "application/xml" )
 	//req.Header.Set("Accept", "application/json" )
 
-	response, err := s.httpClient.Do( req )
-	if err != nil {
-		return nil, err
+	var response * http.Response
+	count := 0
+	for {
+		response, err = s.httpClient.Do(req)
+		count ++
+		if err != nil {
+			if s.canRetry( err ) == false {
+				return nil, err
+			}
+
+			// break when tried too many times
+			if count >= maxHttpRetries {
+				return nil, err
+			}
+
+			log.Printf("POST failed with error, retrying (%s)", err )
+
+			// sleep for a bit before retrying
+			time.Sleep( retrySleepTime )
+		} else {
+			// success, break
+			break
+		}
 	}
 
 	defer response.Body.Close()
@@ -124,6 +149,23 @@ func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, uint, error )
     return 0, 0, nil
 }
 
+// examines the error and decides if if can be retried
+func ( s * solrImpl ) canRetry( err error ) bool {
+
+	if strings.Contains( err.Error( ), "operation timed out" ) == true {
+		return true
+	}
+
+	if strings.Contains( err.Error( ), "write: broken pipe" ) == true {
+		return true
+	}
+
+	//if strings.Contains( err.Error( ), "network is down" ) == true {
+	//	return true
+	//}
+
+	return false
+}
 //
 // end of file
 //
