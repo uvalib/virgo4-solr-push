@@ -1,210 +1,210 @@
 package main
 
 import (
-   "github.com/uvalib/virgo4-sqs-sdk/awssqs"
-   "log"
-   "time"
+	"github.com/uvalib/virgo4-sqs-sdk/awssqs"
+	"log"
+	"time"
 )
 
 // time to wait for inbound messages before doing something else
 var waitTimeout = 5 * time.Second
 
-func worker( id int, config * ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, inbound <- chan awssqs.Message, ) {
+func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, inbound <-chan awssqs.Message) {
 
-   // create the SOLR configuration
-   solrConfig := SolrConfig{
-      EndpointUrl:    config.SolrUrl,
-      CoreName:       config.SolrCoreName,
-      MaxBlockCount:  config.SolrBlockCount,
-      CommitTime:     time.Duration( config.SolrCommitTime) * time.Second,
-      FlushTime:      time.Duration( config.SolrFlushTime) * time.Second,
-      RequestTimeout: time.Duration( config.SolrTimeout ) * time.Second,
-   }
+	// create the SOLR configuration
+	solrConfig := SolrConfig{
+		EndpointUrl:    config.SolrUrl,
+		CoreName:       config.SolrCoreName,
+		MaxBlockCount:  config.SolrBlockCount,
+		CommitTime:     time.Duration(config.SolrCommitTime) * time.Second,
+		FlushTime:      time.Duration(config.SolrFlushTime) * time.Second,
+		RequestTimeout: time.Duration(config.SolrTimeout) * time.Second,
+	}
 
-   // and our SOLR instance
-   solr, err := NewSolr( id, solrConfig )
-   fatalIfError( err )
+	// and our SOLR instance
+	solr, err := NewSolr(id, solrConfig)
+	fatalIfError(err)
 
-   // keep a list of the messages queued so we can delete them once they are sent to SOLR
-   queued := make( []awssqs.Message, 0, config.SolrBlockCount )
-   var message awssqs.Message
+	// keep a list of the messages queued so we can delete them once they are sent to SOLR
+	queued := make([]awssqs.Message, 0, config.SolrBlockCount)
+	var message awssqs.Message
 
-   for {
+	for {
 
-      arrived := false
+		arrived := false
 
-      // process a message or wait...
-      select {
-      case message = <- inbound:
-         arrived = true
-         break
-      case <- time.After( waitTimeout ):
-         break
-      }
+		// process a message or wait...
+		select {
+		case message = <-inbound:
+			arrived = true
+			break
+		case <-time.After(waitTimeout):
+			break
+		}
 
-      // we have an inbound message to process
-      if arrived == true {
+		// we have an inbound message to process
+		if arrived == true {
 
-         // buffer it to SOLR
-         err = solr.BufferDoc( message.Payload )
-         fatalIfError( err )
+			// buffer it to SOLR
+			err = solr.BufferDoc(message.Payload)
+			fatalIfError(err)
 
-         // add it to the queued list
-         queued = append( queued, message )
-      }
+			// add it to the queued list
+			queued = append(queued, message)
+		}
 
-      // check to see if it is time to 'add' these to SOLR
-      if solr.IsTimeToAdd( ) == true {
+		// check to see if it is time to 'add' these to SOLR
+		if solr.IsTimeToAdd() == true {
 
-         // add them
-         failedIx, err := solr.ForceAdd( )
-         if err != nil && err != documentAddFailed {
-            fatalIfError(err)
-         }
+			// add them
+			failedIx, err := solr.ForceAdd()
+			if err != nil && err != documentAddFailed {
+				fatalIfError(err)
+			}
 
-         // one of the documents failed to add
-         if err == documentAddFailed {
+			// one of the documents failed to add
+			if err == documentAddFailed {
 
-            // how many do we have total
-            sz := uint(len(queued))
+				// how many do we have total
+				sz := uint(len(queued))
 
-            // if the failure document was not the last one
-            if failedIx < sz {
+				// if the failure document was not the last one
+				if failedIx < sz {
 
-               log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
-                  failedIx - 1, failedIx, failedIx + 1, sz )
+					log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
+						failedIx-1, failedIx, failedIx+1, sz)
 
-               // delete the ones that succeeded
-               err = batchDelete(id, aws, queue, queued[ 0:failedIx ])
-               fatalIfError(err)
+					// delete the ones that succeeded
+					err = batchDelete(id, aws, queue, queued[0:failedIx])
+					fatalIfError(err)
 
-               // ignore the one that failed and keep the remainder for the next
-               queued = queued[failedIx+1:]
+					// ignore the one that failed and keep the remainder for the next
+					queued = queued[failedIx+1:]
 
-            } else {
-               log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
+				} else {
+					log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
 
-               // delete all but the last of them of them
-               err = batchDelete(id, aws, queue, queued[0:sz] )
-               fatalIfError(err)
+					// delete all but the last of them of them
+					err = batchDelete(id, aws, queue, queued[0:sz])
+					fatalIfError(err)
 
-               // clear the queue
-               queued = queued[:0]
-            }
-         } else {
+					// clear the queue
+					queued = queued[:0]
+				}
+			} else {
 
-            // delete all of them
-            err = batchDelete(id, aws, queue, queued )
-            fatalIfError(err)
+				// delete all of them
+				err = batchDelete(id, aws, queue, queued)
+				fatalIfError(err)
 
-            // clear the queue
-            queued = queued[:0]
-         }
-      }
+				// clear the queue
+				queued = queued[:0]
+			}
+		}
 
-      // is it time to send a commit to SOLR
-      if solr.IsTimeToCommit( ) == true {
-         err = solr.ForceCommit( )
-         fatalIfError( err )
-      }
-   }
+		// is it time to send a commit to SOLR
+		if solr.IsTimeToCommit() == true {
+			err = solr.ForceCommit()
+			fatalIfError(err)
+		}
+	}
 }
 
-func batchDelete( id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message ) error {
+func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
 
-   // ensure there is work to do
-   count := uint( len( messages ) )
-   if count == 0 {
-      return nil
-   }
+	// ensure there is work to do
+	count := uint(len(messages))
+	if count == 0 {
+		return nil
+	}
 
-   //log.Printf( "About to delete block of %d", count )
+	//log.Printf( "About to delete block of %d", count )
 
-   start := time.Now()
+	start := time.Now()
 
-   // we do delete in blocks of awssqs.MAX_SQS_BLOCK_COUNT
-   fullBlocks := count / awssqs.MAX_SQS_BLOCK_COUNT
-   remainder := count % awssqs.MAX_SQS_BLOCK_COUNT
+	// we do delete in blocks of awssqs.MAX_SQS_BLOCK_COUNT
+	fullBlocks := count / awssqs.MAX_SQS_BLOCK_COUNT
+	remainder := count % awssqs.MAX_SQS_BLOCK_COUNT
 
-   // go through the inbound messages a 'block' at a time
-   for bix := uint( 0 ); bix < fullBlocks; bix++ {
+	// go through the inbound messages a 'block' at a time
+	for bix := uint(0); bix < fullBlocks; bix++ {
 
-      // calculate slice range
-      start := bix * awssqs.MAX_SQS_BLOCK_COUNT
-      end := start + awssqs.MAX_SQS_BLOCK_COUNT
+		// calculate slice range
+		start := bix * awssqs.MAX_SQS_BLOCK_COUNT
+		end := start + awssqs.MAX_SQS_BLOCK_COUNT
 
-      //log.Printf( "Deleting slice [%d:%d]", start, end )
+		//log.Printf( "Deleting slice [%d:%d]", start, end )
 
-      // and delete them
-      err := blockDelete( aws, queue, messages[ start:end ] )
-      if err != nil {
-         return err
-      }
-   }
+		// and delete them
+		err := blockDelete(aws, queue, messages[start:end])
+		if err != nil {
+			return err
+		}
+	}
 
-   // handle any remaining
-   if remainder != 0 {
+	// handle any remaining
+	if remainder != 0 {
 
-      // calculate slice range
-      start := fullBlocks * awssqs.MAX_SQS_BLOCK_COUNT
-      end := start + remainder
+		// calculate slice range
+		start := fullBlocks * awssqs.MAX_SQS_BLOCK_COUNT
+		end := start + remainder
 
-      //log.Printf( "Deleting slice [%d:%d]", start, end )
+		//log.Printf( "Deleting slice [%d:%d]", start, end )
 
-      // and delete them
-      err := blockDelete( aws, queue, messages[ start:end ] )
-      if err != nil {
-         return err
-      }
-   }
+		// and delete them
+		err := blockDelete(aws, queue, messages[start:end])
+		if err != nil {
+			return err
+		}
+	}
 
-   duration := time.Since( start )
-   log.Printf("Worker %d: batch delete completed in %0.2f seconds", id, duration.Seconds( ) )
+	duration := time.Since(start)
+	log.Printf("Worker %d: batch delete completed in %0.2f seconds", id, duration.Seconds())
 
-   return nil
+	return nil
 }
 
-func blockDelete( aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message ) error {
+func blockDelete(aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
 
-   // delete the block
-   opStatus, err := aws.BatchMessageDelete( queue, messages )
-   if err != nil {
-      if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
-         return err
-      }
-   }
+	// delete the block
+	opStatus, err := aws.BatchMessageDelete(queue, messages)
+	if err != nil {
+		if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
+			return err
+		}
+	}
 
-   // if one or more message failed to delete, retry...
-   if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
-      retryMessages := make( []awssqs.Message, 0, awssqs.MAX_SQS_BLOCK_COUNT )
+	// if one or more message failed to delete, retry...
+	if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
+		retryMessages := make([]awssqs.Message, 0, awssqs.MAX_SQS_BLOCK_COUNT)
 
-      // check the operation results
-      for ix, op := range opStatus {
-         if op == false {
-            log.Printf("WARNING: message %d failed to delete, retrying", ix)
-            retryMessages = append( retryMessages, messages[ ix ] )
-         }
-      }
+		// check the operation results
+		for ix, op := range opStatus {
+			if op == false {
+				log.Printf("WARNING: message %d failed to delete, retrying", ix)
+				retryMessages = append(retryMessages, messages[ix])
+			}
+		}
 
-      // attempt another send of the ones that failed last time
-      opStatus, err = aws.BatchMessagePut( queue, retryMessages )
-      if err != nil {
-         if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
-            return err
-         }
-      }
+		// attempt another send of the ones that failed last time
+		opStatus, err = aws.BatchMessagePut(queue, retryMessages)
+		if err != nil {
+			if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
+				return err
+			}
+		}
 
-      // did we fail again
-      if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
-         for ix, op := range opStatus {
-            if op == false {
-               log.Printf("ERROR: message %d failed to delete, giving up", ix)
-            }
-         }
-      }
-   }
+		// did we fail again
+		if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
+			for ix, op := range opStatus {
+				if op == false {
+					log.Printf("ERROR: message %d failed to delete, giving up", ix)
+				}
+			}
+		}
+	}
 
-   return nil
+	return nil
 }
 
 //

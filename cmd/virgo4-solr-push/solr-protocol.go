@@ -18,16 +18,16 @@ import (
 var maxHttpRetries = 3
 var retrySleepTime = 100 * time.Millisecond
 
-var documentAddFailed = fmt.Errorf( "SOLR add failed" )
+var documentAddFailed = fmt.Errorf("SOLR add failed")
 
-func ( s * solrImpl ) protocolCommit( ) error {
+func (s *solrImpl) protocolCommit() error {
 
-	body, err := s.httpPost( []byte( "<commit/>" ) )
+	body, err := s.httpPost([]byte("<commit/>"))
 	if err != nil {
-	   return err
+		return err
 	}
 
-	_, _, err = s.processResponsePayload( body )
+	_, _, err = s.processResponsePayload(body)
 	if err != nil {
 		return err
 	}
@@ -36,20 +36,20 @@ func ( s * solrImpl ) protocolCommit( ) error {
 	return nil
 }
 
-func ( s * solrImpl ) protocolAdd( buffer []byte ) ( uint, error ) {
+func (s *solrImpl) protocolAdd(buffer []byte) (uint, error) {
 
-	body, err := s.httpPost( buffer )
+	body, err := s.httpPost(buffer)
 	if err != nil {
 		return 0, err
 	}
 
-	_, docIx, err := s.processResponsePayload( body )
+	_, docIx, err := s.processResponsePayload(body)
 	if err != nil {
 
 		// one of the documents in the add list failed
 		if err == documentAddFailed {
 			// special case here...
-			log.Printf("ERROR: add document at index %d FAILED", docIx )
+			log.Printf("ERROR: add document at index %d FAILED", docIx)
 			return docIx, err
 		}
 
@@ -60,25 +60,25 @@ func ( s * solrImpl ) protocolAdd( buffer []byte ) ( uint, error ) {
 	return 0, nil
 }
 
-func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
+func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 
 	//fmt.Printf( "%s\n", s.url )
 
-	req, err := http.NewRequest("POST", s.PostUrl, bytes.NewBuffer( buffer ) )
+	req, err := http.NewRequest("POST", s.PostUrl, bytes.NewBuffer(buffer))
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/xml" )
+	req.Header.Set("Content-Type", "application/xml")
 	//req.Header.Set("Accept", "application/json" )
 
-	var response * http.Response
+	var response *http.Response
 	count := 0
 	for {
 		response, err = s.httpClient.Do(req)
-		count ++
+		count++
 		if err != nil {
-			if s.canRetry( err ) == false {
+			if s.canRetry(err) == false {
 				return nil, err
 			}
 
@@ -87,10 +87,10 @@ func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 				return nil, err
 			}
 
-			log.Printf("POST failed with error, retrying (%s)", err )
+			log.Printf("POST failed with error, retrying (%s)", err)
 
 			// sleep for a bit before retrying
-			time.Sleep( retrySleepTime )
+			time.Sleep(retrySleepTime)
 		} else {
 			// success, break
 			break
@@ -99,7 +99,7 @@ func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 
 	defer response.Body.Close()
 
-	body, err := ioutil.ReadAll( response.Body )
+	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -108,55 +108,55 @@ func ( s * solrImpl ) httpPost( buffer []byte ) ( []byte, error ){
 	return body, nil
 }
 
-func ( s * solrImpl ) processResponsePayload( body []byte ) ( int, uint, error ) {
+func (s *solrImpl) processResponsePayload(body []byte) (int, uint, error) {
 
 	// generate a query structure from the body
-	doc, err := xmlquery.Parse( bytes.NewReader( body ) )
+	doc, err := xmlquery.Parse(bytes.NewReader(body))
 	if err != nil {
 		return 0, 0, err
 	}
 
 	// attempt to extract the statusNode field
-	statusNode := xmlquery.FindOne( doc, "//response/lst[@name='responseHeader']/int[@name='status']")
+	statusNode := xmlquery.FindOne(doc, "//response/lst[@name='responseHeader']/int[@name='status']")
 	if statusNode == nil {
-		return 0, 0, fmt.Errorf( "Cannot find status field in response payload (%s)", body )
+		return 0, 0, fmt.Errorf("Cannot find status field in response payload (%s)", body)
 	}
 
 	// if it appears that we have an error
-	if statusNode.InnerText( ) != "0" {
+	if statusNode.InnerText() != "0" {
 
 		// extract the status and attempt to find the error messageNode body
-		status, _ := strconv.Atoi( statusNode.InnerText( ) )
+		status, _ := strconv.Atoi(statusNode.InnerText())
 
-		messageNode := xmlquery.FindOne( doc, "//response/lst[@name='error']/str[@name='msg']")
+		messageNode := xmlquery.FindOne(doc, "//response/lst[@name='error']/str[@name='msg']")
 		if messageNode != nil {
 
 			// if this is an error on a specific document, we can extract that information
 			re := regexp.MustCompile(`\[(\d+),\d+\]`)
-			match := re.FindStringSubmatch( messageNode.InnerText( ) )
+			match := re.FindStringSubmatch(messageNode.InnerText())
 			if match != nil {
-				fmt.Printf( "%s", body )
-				docnum, _ := strconv.Atoi( match[ 1 ] )
+				fmt.Printf("%s", body)
+				docnum, _ := strconv.Atoi(match[1])
 
 				// return index of failing item
-				return status, uint( docnum ) - 1, documentAddFailed
+				return status, uint(docnum) - 1, documentAddFailed
 			}
 		}
-		return status, 0, fmt.Errorf( "%s", body )
+		return status, 0, fmt.Errorf("%s", body)
 	}
 
 	// all good
-    return 0, 0, nil
+	return 0, 0, nil
 }
 
 // examines the error and decides if if can be retried
-func ( s * solrImpl ) canRetry( err error ) bool {
+func (s *solrImpl) canRetry(err error) bool {
 
-	if strings.Contains( err.Error( ), "operation timed out" ) == true {
+	if strings.Contains(err.Error(), "operation timed out") == true {
 		return true
 	}
 
-	if strings.Contains( err.Error( ), "write: broken pipe" ) == true {
+	if strings.Contains(err.Error(), "write: broken pipe") == true {
 		return true
 	}
 
@@ -166,6 +166,7 @@ func ( s * solrImpl ) canRetry( err error ) bool {
 
 	return false
 }
+
 //
 // end of file
 //

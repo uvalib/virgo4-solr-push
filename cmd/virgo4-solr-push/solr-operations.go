@@ -1,131 +1,130 @@
 package main
 
 import (
-   "log"
-   "time"
+	"log"
+	"time"
 )
 
-func ( s * solrImpl ) BufferDoc( doc []byte ) error {
+func (s *solrImpl) BufferDoc(doc []byte) error {
 
-   // if we have not yet added any documents
-   if s.pendingAdds == 0 {
-      s.addBuffer = append( s.addBuffer, []byte( "<add>" )... )
+	// if we have not yet added any documents
+	if s.pendingAdds == 0 {
+		s.addBuffer = append(s.addBuffer, []byte("<add>")...)
 
-      // we are only interested in tracking the time for the last add after the first document is actually
-      // added to the buffer
-      s.lastAdd = time.Now( )
-   }
+		// we are only interested in tracking the time for the last add after the first document is actually
+		// added to the buffer
+		s.lastAdd = time.Now()
+	}
 
-   // add the document and update the document count
-   s.addBuffer = append( s.addBuffer, doc... )
-   s.pendingAdds++
+	// add the document and update the document count
+	s.addBuffer = append(s.addBuffer, doc...)
+	s.pendingAdds++
 
-   return nil
+	return nil
 }
 
-func ( s * solrImpl ) IsAlive( ) error {
-   //_, _, err := s.si.Ping()
-   return nil
+func (s *solrImpl) IsAlive() error {
+	//_, _, err := s.si.Ping()
+	return nil
 }
 
-func ( s * solrImpl ) IsTimeToAdd( ) bool {
+func (s *solrImpl) IsTimeToAdd() bool {
 
-   // if we have no pending adds then no add is required
-   if s.pendingAdds == 0 {
-      return false
-   }
+	// if we have no pending adds then no add is required
+	if s.pendingAdds == 0 {
+		return false
+	}
 
-   //
-   // its time to add if we have reached the configured block size or of we have pending items and we
-   // have not added in the configured number of seconds
-   //
-   return s.pendingAdds >= s.Config.MaxBlockCount || time.Since(s.lastAdd).Seconds() > s.Config.FlushTime.Seconds()
+	//
+	// its time to add if we have reached the configured block size or of we have pending items and we
+	// have not added in the configured number of seconds
+	//
+	return s.pendingAdds >= s.Config.MaxBlockCount || time.Since(s.lastAdd).Seconds() > s.Config.FlushTime.Seconds()
 }
 
 // it is time to commit if we have recently added one or more documents without committing and
 // the commit time has elapsed
-func ( s * solrImpl ) IsTimeToCommit( ) bool {
+func (s *solrImpl) IsTimeToCommit() bool {
 
-   // if SOLR is not dirty then no commit is required
-   if s.solrDirty == false {
-      return false
-   }
+	// if SOLR is not dirty then no commit is required
+	if s.solrDirty == false {
+		return false
+	}
 
-   // if our commit time is zero, it means that client committing is disabled
-   if s.Config.CommitTime.Seconds() == 0 {
-      return false
-   }
+	// if our commit time is zero, it means that client committing is disabled
+	if s.Config.CommitTime.Seconds() == 0 {
+		return false
+	}
 
-   //
-   // its time to commit if we have not committed in the configured number of seconds
-   //
-   return time.Since(s.lastCommit).Seconds() > s.Config.CommitTime.Seconds()
+	//
+	// its time to commit if we have not committed in the configured number of seconds
+	//
+	return time.Since(s.lastCommit).Seconds() > s.Config.CommitTime.Seconds()
 }
 
-func ( s * solrImpl ) ForceAdd( ) ( uint, error ) {
+func (s *solrImpl) ForceAdd() (uint, error) {
 
-   // nothing to add
-   if s.pendingAdds == 0 {
-      return 0, nil
-   }
+	// nothing to add
+	if s.pendingAdds == 0 {
+		return 0, nil
+	}
 
-   s.addBuffer = append( s.addBuffer, []byte( "</add>" )... )
-   //log.Printf("Worker %d: sending %d documents to SOLR", s.workerId, s.pendingAdds )
-   log.Printf("Worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len( s.addBuffer ) )
+	s.addBuffer = append(s.addBuffer, []byte("</add>")...)
+	//log.Printf("Worker %d: sending %d documents to SOLR", s.workerId, s.pendingAdds )
+	log.Printf("Worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len(s.addBuffer))
 
-   // add to SOLR
-   start := time.Now()
-   failedIx, err := s.protocolAdd( s.addBuffer )
+	// add to SOLR
+	start := time.Now()
+	failedIx, err := s.protocolAdd(s.addBuffer)
 
-   // fatal error
-   if err != nil && err != documentAddFailed {
-      return 0, err
-   }
+	// fatal error
+	if err != nil && err != documentAddFailed {
+		return 0, err
+	}
 
-   duration := time.Since( start )
-   log.Printf("Worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds( ) )
+	duration := time.Since(start)
+	log.Printf("Worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds())
 
-   // only start timing for a SOLR commit after SOLR becomes dirty
-   if s.solrDirty == false {
-      s.lastCommit = time.Now( )
-   }
+	// only start timing for a SOLR commit after SOLR becomes dirty
+	if s.solrDirty == false {
+		s.lastCommit = time.Now()
+	}
 
-   // update state variables
-   s.solrDirty = true
-   s.addBuffer = s.addBuffer[:0]
-   s.pendingAdds = 0
-   s.lastAdd = time.Now( )
+	// update state variables
+	s.solrDirty = true
+	s.addBuffer = s.addBuffer[:0]
+	s.pendingAdds = 0
+	s.lastAdd = time.Now()
 
-   return failedIx, err
+	return failedIx, err
 }
 
-func ( s * solrImpl ) ForceCommit( ) error {
+func (s *solrImpl) ForceCommit() error {
 
-   // nothing to commit
-   if s.solrDirty == false {
-      return nil
-   }
+	// nothing to commit
+	if s.solrDirty == false {
+		return nil
+	}
 
-   //log.Printf("Worker %d: committing SOLR", s.workerId )
+	//log.Printf("Worker %d: committing SOLR", s.workerId )
 
-   // commit the changes
-   start := time.Now()
-   err := s.protocolCommit()
-   duration := time.Since( start )
+	// commit the changes
+	start := time.Now()
+	err := s.protocolCommit()
+	duration := time.Since(start)
 
-   if err != nil {
-      return err
-   }
+	if err != nil {
+		return err
+	}
 
-   log.Printf("Worker %d: commit completed in %0.2f seconds", s.workerId, duration.Seconds( ) )
+	log.Printf("Worker %d: commit completed in %0.2f seconds", s.workerId, duration.Seconds())
 
-   // update state variables
-   s.lastCommit = time.Now( )
-   s.solrDirty = false
+	// update state variables
+	s.lastCommit = time.Now()
+	s.solrDirty = false
 
-   return nil
+	return nil
 }
-
 
 //
 // end of file
