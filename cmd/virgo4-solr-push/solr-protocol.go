@@ -100,7 +100,7 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 
 				body, _ := ioutil.ReadAll(response.Body)
 
-				return body, fmt.Errorf( "request returns HTTP %d", response.StatusCode )
+				return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
 			} else {
 				body, err := ioutil.ReadAll(response.Body)
 				if err != nil {
@@ -166,7 +166,7 @@ func (s *solrImpl) canRetry(err error) bool {
 		return true
 	}
 
-	if strings.Contains( err.Error( ), "no such host" ) == true {
+	if strings.Contains(err.Error(), "no such host") == true {
 		return true
 	}
 
