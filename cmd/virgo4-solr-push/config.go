@@ -88,6 +88,10 @@ func LoadConfiguration() *ServiceConfig {
 	log.Printf("[CONFIG] WorkerQueueSize      = [%d]", cfg.WorkerQueueSize)
 	log.Printf("[CONFIG] Workers              = [%d]", cfg.Workers)
 
+	if cfg.SolrCommitTime == 0 {
+		log.Printf("INFO: commit time is zero, SOLR commits are DISABLED!!")
+	}
+
 	return &cfg
 }
 
