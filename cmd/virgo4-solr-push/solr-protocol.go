@@ -92,20 +92,26 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 			// sleep for a bit before retrying
 			time.Sleep(retrySleepTime)
 		} else {
-			// success, break
-			break
+
+			defer response.Body.Close()
+
+			if response.StatusCode != http.StatusOK {
+				log.Printf("ERROR: POST failed with status %d", response.StatusCode)
+
+				body, _ := ioutil.ReadAll(response.Body)
+
+				return body, fmt.Errorf( "request returns HTTP %d", response.StatusCode )
+			} else {
+				body, err := ioutil.ReadAll(response.Body)
+				if err != nil {
+					return nil, err
+				}
+
+				//log.Printf( body )
+				return body, nil
+			}
 		}
 	}
-
-	defer response.Body.Close()
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	//log.Printf( body )
-	return body, nil
 }
 
 func (s *solrImpl) processResponsePayload(body []byte) (int, uint, error) {
@@ -157,6 +163,10 @@ func (s *solrImpl) canRetry(err error) bool {
 	}
 
 	if strings.Contains(err.Error(), "write: broken pipe") == true {
+		return true
+	}
+
+	if strings.Contains( err.Error( ), "no such host" ) == true {
 		return true
 	}
 
