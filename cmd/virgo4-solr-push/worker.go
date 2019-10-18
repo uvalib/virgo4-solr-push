@@ -11,18 +11,8 @@ var waitTimeout = 5 * time.Second
 
 func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, inbound <-chan awssqs.Message) {
 
-	// create the SOLR configuration
-	solrConfig := SolrConfig{
-		EndpointUrl:    config.SolrUrl,
-		CoreName:       config.SolrCoreName,
-		MaxBlockCount:  config.SolrBlockCount,
-		CommitTime:     time.Duration(config.SolrCommitTime) * time.Second,
-		FlushTime:      time.Duration(config.SolrFlushTime) * time.Second,
-		RequestTimeout: time.Duration(config.SolrTimeout) * time.Second,
-	}
-
-	// and our SOLR instance
-	solr, err := NewSolr(id, solrConfig)
+	// create our SOLR instance
+	solr, err := NewSolr(id, *config)
 	fatalIfError(err)
 
 	// keep a list of the messages queued so we can delete them once they are sent to SOLR

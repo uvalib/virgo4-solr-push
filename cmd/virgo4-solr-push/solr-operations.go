@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 )
@@ -9,7 +10,17 @@ func (s *solrImpl) BufferDoc(doc []byte) error {
 
 	// if we have not yet added any documents
 	if s.pendingAdds == 0 {
-		s.addBuffer = append(s.addBuffer, []byte("<add>")...)
+
+		// create the open tag for the command
+		tag := fmt.Sprintf("<%s>", s.Config.SolrMode)
+
+		// if we are doing client side commit withins
+		if s.Config.SolrCommitWithinTime != 0 {
+			// commit within time is specified in milliseconds
+			tag = fmt.Sprintf("<%s commitWithin=\"%d\">", s.Config.SolrMode, s.Config.SolrCommitWithinTime*1000)
+		}
+
+		s.addBuffer = append(s.addBuffer, []byte(tag)...)
 
 		// we are only interested in tracking the time for the last add after the first document is actually
 		// added to the buffer
@@ -39,7 +50,8 @@ func (s *solrImpl) IsTimeToAdd() bool {
 	// its time to add if we have reached the configured block size or of we have pending items and we
 	// have not added in the configured number of seconds
 	//
-	return s.pendingAdds >= s.Config.MaxBlockCount || time.Since(s.lastAdd).Seconds() > s.Config.FlushTime.Seconds()
+	return s.pendingAdds >= s.Config.SolrBlockCount ||
+		time.Since(s.lastAdd).Seconds() > (time.Duration(s.Config.SolrFlushTime)*time.Second).Seconds()
 }
 
 // it is time to commit if we have recently added one or more documents without committing and
@@ -51,15 +63,15 @@ func (s *solrImpl) IsTimeToCommit() bool {
 		return false
 	}
 
-	// if our commit time is zero, it means that client committing is disabled
-	if s.Config.CommitTime.Seconds() == 0 {
+	// if our commit time is zero, it means that client explicit committing is disabled
+	if s.Config.SolrCommitTime == 0 {
 		return false
 	}
 
 	//
 	// its time to commit if we have not committed in the configured number of seconds
 	//
-	return time.Since(s.lastCommit).Seconds() > s.Config.CommitTime.Seconds()
+	return time.Since(s.lastCommit).Seconds() > (time.Duration(s.Config.SolrCommitTime) * time.Second).Seconds()
 }
 
 func (s *solrImpl) ForceAdd() (uint, error) {
@@ -69,7 +81,8 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 		return 0, nil
 	}
 
-	s.addBuffer = append(s.addBuffer, []byte("</add>")...)
+	tag := fmt.Sprintf("</%s>", s.Config.SolrMode)
+	s.addBuffer = append(s.addBuffer, []byte(tag)...)
 	//log.Printf("Worker %d: sending %d documents to SOLR", s.workerId, s.pendingAdds )
 	log.Printf("Worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len(s.addBuffer))
 
