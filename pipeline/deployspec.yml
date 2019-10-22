@@ -27,9 +27,9 @@ phases:
       - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-solr-update
       - terraform init
       - terraform apply -auto-approve -var container_tag=$latest_build
-#      - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-solr-delete
-#      - terraform init
-#      - terraform apply -auto-approve -var container_tag=$latest_build
+      - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-solr-delete
+      - terraform init
+      - terraform apply -auto-approve -var container_tag=$latest_build
 
 #  post_build:
 #    commands:
