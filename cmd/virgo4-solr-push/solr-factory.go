@@ -37,7 +37,7 @@ func newSolr(id int, config ServiceConfig) (SOLR, error) {
 	impl.lastCommit = time.Now()
 	impl.lastAdd = time.Now()
 
-	impl.addBuffer = make([]byte, 0, 1024*1024*64)
+	impl.addBuffer = make([]byte, 0, 1024*1024*12)
 
 	// configure the client
 	impl.httpClient = &http.Client{
