@@ -62,19 +62,17 @@ func (s *solrImpl) protocolAdd(buffer []byte) (uint, error) {
 
 func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 
-	//fmt.Printf( "%s\n", s.url )
-
-	req, err := http.NewRequest("POST", s.PostUrl, bytes.NewBuffer(buffer))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/xml")
-	//req.Header.Set("Accept", "application/json" )
-
 	var response *http.Response
 	count := 0
+
 	for {
+		req, err := http.NewRequest("POST", s.PostUrl, bytes.NewBuffer(buffer))
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Content-Type", "application/xml")
+
 		response, err = s.httpClient.Do(req)
 		count++
 		if err != nil {
@@ -107,7 +105,6 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 					return nil, err
 				}
 
-				//log.Printf( body )
 				return body, nil
 			}
 		}
@@ -174,9 +171,9 @@ func (s *solrImpl) canRetry(err error) bool {
 		return true
 	}
 
-	//if strings.Contains( err.Error( ), "network is down" ) == true {
-	//	return true
-	//}
+	if strings.Contains( err.Error( ), "network is down" ) == true {
+		return true
+	}
 
 	return false
 }
