@@ -85,7 +85,7 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 				return nil, err
 			}
 
-			log.Printf("POST failed with error, retrying (%s)", err)
+			log.Printf("WARNING: POST failed with error, retrying (%s)", err)
 
 			// sleep for a bit before retrying
 			time.Sleep(retrySleepTime)
