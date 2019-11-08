@@ -158,13 +158,13 @@ func blockDelete(aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs
 	// delete the block
 	opStatus, err := aws.BatchMessageDelete(queue, messages)
 	if err != nil {
-		if err != awssqs.OneOrMoreOperationsUnsuccessfulError {
+		if err != awssqs.ErrOneOrMoreOperationsUnsuccessful {
 			return err
 		}
 	}
 
 	// did we fail
-	if err == awssqs.OneOrMoreOperationsUnsuccessfulError {
+	if err == awssqs.ErrOneOrMoreOperationsUnsuccessful {
 		for ix, op := range opStatus {
 			if op == false {
 				log.Printf("ERROR: message %d failed to delete", ix)
