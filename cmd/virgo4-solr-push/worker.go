@@ -27,9 +27,8 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 		select {
 		case message = <-inbound:
 			arrived = true
-			break
+
 		case <-time.After(waitTimeout):
-			break
 		}
 
 		// we have an inbound message to process
@@ -48,12 +47,12 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 
 			// add them
 			failedIx, err := solr.ForceAdd()
-			if err != nil && err != documentAddFailed {
+			if err != nil && err != ErrDocumentAdd {
 				fatalIfError(err)
 			}
 
 			// one of the documents failed to add
-			if err == documentAddFailed {
+			if err == ErrDocumentAdd {
 
 				// how many do we have total
 				sz := uint(len(queued))

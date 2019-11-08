@@ -18,7 +18,7 @@ import (
 var maxHttpRetries = 3
 var retrySleepTime = 100 * time.Millisecond
 
-var documentAddFailed = fmt.Errorf("SOLR add failed")
+var ErrDocumentAdd = fmt.Errorf("document add failed")
 
 func (s *solrImpl) protocolCommit() error {
 
@@ -47,7 +47,7 @@ func (s *solrImpl) protocolAdd(buffer []byte) (uint, error) {
 	if err != nil {
 
 		// one of the documents in the add list failed
-		if err == documentAddFailed {
+		if err == ErrDocumentAdd {
 			// special case here...
 			log.Printf("ERROR: add document at index %d FAILED", docIx)
 			return docIx, err
@@ -122,7 +122,7 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, uint, error) {
 	// attempt to extract the statusNode field
 	statusNode := xmlquery.FindOne(doc, "//response/lst[@name='responseHeader']/int[@name='status']")
 	if statusNode == nil {
-		return 0, 0, fmt.Errorf("Cannot find status field in response payload (%s)", body)
+		return 0, 0, fmt.Errorf("cannot find status field in response payload (%s)", body)
 	}
 
 	// if it appears that we have an error
@@ -142,7 +142,7 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, uint, error) {
 				docnum, _ := strconv.Atoi(match[1])
 
 				// return index of failing item
-				return status, uint(docnum) - 1, documentAddFailed
+				return status, uint(docnum) - 1, ErrDocumentAdd
 			}
 		}
 		return status, 0, fmt.Errorf("%s", body)
@@ -171,7 +171,7 @@ func (s *solrImpl) canRetry(err error) bool {
 		return true
 	}
 
-	if strings.Contains( err.Error( ), "network is down" ) == true {
+	if strings.Contains(err.Error(), "network is down") == true {
 		return true
 	}
 

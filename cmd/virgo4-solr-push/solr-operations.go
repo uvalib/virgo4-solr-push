@@ -91,7 +91,7 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 	failedIx, err := s.protocolAdd(s.addBuffer)
 
 	// fatal error
-	if err != nil && err != documentAddFailed {
+	if err != nil && err != ErrDocumentAdd {
 		return 0, err
 	}
 
