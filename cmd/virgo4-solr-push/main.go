@@ -39,7 +39,7 @@ func main() {
 	}
 
 	// TEMP ONLY
-	go http.ListenAndServe("localhost:8080", nil)
+	go http.ListenAndServe(":8080", nil)
 
 	for {
 
