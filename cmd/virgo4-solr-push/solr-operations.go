@@ -83,8 +83,7 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 
 	tag := fmt.Sprintf("</%s>", s.Config.SolrMode)
 	s.addBuffer = append(s.addBuffer, []byte(tag)...)
-	//log.Printf("Worker %d: sending %d documents to SOLR", s.workerId, s.pendingAdds )
-	log.Printf("Worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len(s.addBuffer))
+	log.Printf("worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len(s.addBuffer))
 
 	// add to SOLR
 	start := time.Now()
@@ -96,7 +95,7 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 	}
 
 	duration := time.Since(start)
-	log.Printf("Worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds())
+	log.Printf("worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds())
 
 	// only start timing for a SOLR commit after SOLR becomes dirty
 	if s.solrDirty == false {
@@ -105,7 +104,9 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 
 	// update state variables
 	s.solrDirty = true
-	s.addBuffer = s.addBuffer[:0]
+	// we reallocate it here so it does not grow unbounded
+	//s.addBuffer = s.addBuffer[:0]
+	s.addBuffer = make([]byte, 0, s.defaultBufferSize)
 	s.pendingAdds = 0
 	s.lastAdd = time.Now()
 
@@ -119,7 +120,7 @@ func (s *solrImpl) ForceCommit() error {
 		return nil
 	}
 
-	//log.Printf("Worker %d: committing SOLR", s.workerId )
+	//log.Printf("worker %d: committing SOLR", s.workerId )
 
 	// commit the changes
 	start := time.Now()
@@ -130,7 +131,7 @@ func (s *solrImpl) ForceCommit() error {
 		return err
 	}
 
-	log.Printf("Worker %d: commit completed in %0.2f seconds", s.workerId, duration.Seconds())
+	log.Printf("worker %d: commit completed in %0.2f seconds", s.workerId, duration.Seconds())
 
 	// update state variables
 	s.lastCommit = time.Now()

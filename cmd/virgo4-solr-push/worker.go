@@ -148,7 +148,7 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 	}
 
 	duration := time.Since(start)
-	log.Printf("Worker %d: batch delete completed in %0.2f seconds", id, duration.Seconds())
+	log.Printf("worker %d: batch delete completed in %0.2f seconds", id, duration.Seconds())
 
 	return nil
 }
