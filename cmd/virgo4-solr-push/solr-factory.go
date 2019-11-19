@@ -15,12 +15,12 @@ type solrImpl struct {
 	PingUrl    string        // the actual URL to Ping
 
 	// internal state stuff
-	lastCommit        time.Time // when we did our last commit to SOLR
-	lastAdd           time.Time // when we did our last add to SOLR
-	solrDirty         bool      // we have added documents to SOLR without committing
-	pendingAdds       uint      // how many documents in the add buffer
-	addBuffer         []byte    // our document add buffer
-	defaultBufferSize uint      // the default document add buffer size
+	lastCommit     time.Time // when we did our last commit to SOLR
+	lastAdd        time.Time // when we did our last add to SOLR
+	solrDirty      bool      // we have added documents to SOLR without committing
+	pendingAdds    uint      // how many documents in the add buffer
+	addBuffer      []byte    // our document add buffer
+	sendBufferSize uint      // the default document add buffer size
 
 	workerId int // used for logging
 
@@ -38,9 +38,9 @@ func newSolr(id int, config ServiceConfig) (SOLR, error) {
 	impl.lastCommit = time.Now()
 	impl.lastAdd = time.Now()
 
-	// cos we want to reallocate the buffer periodically
-	impl.defaultBufferSize = 1024 * 1024 * 32
-	impl.addBuffer = make([]byte, 0, impl.defaultBufferSize)
+	// turn into megabytes and allocate the send buffer
+	impl.sendBufferSize = 1024 * 1024 * config.SolrBufferSize
+	impl.addBuffer = make([]byte, 0, impl.sendBufferSize)
 
 	// configure the client
 	impl.httpClient = &http.Client{

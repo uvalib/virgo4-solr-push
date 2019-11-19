@@ -47,11 +47,26 @@ func (s *solrImpl) IsTimeToAdd() bool {
 	}
 
 	//
-	// its time to add if we have reached the configured block size or of we have pending items and we
-	// have not added in the configured number of seconds
+	// its time to add if we have reached the configured record size or the configured buffer size or
+	// if we have pending items and we have not added in the configured number of seconds
 	//
-	return s.pendingAdds >= s.Config.SolrBlockCount ||
-		time.Since(s.lastAdd).Seconds() > (time.Duration(s.Config.SolrFlushTime)*time.Second).Seconds()
+
+	if s.pendingAdds >= s.Config.SolrBlockCount {
+		log.Printf("worker %d: reached send block count", s.workerId)
+		return true
+	}
+
+	if len(s.addBuffer) >= int(s.sendBufferSize) {
+		log.Printf("worker %d: reached send buffer size", s.workerId)
+		return true
+	}
+
+	if time.Since(s.lastAdd).Seconds() > (time.Duration(s.Config.SolrFlushTime) * time.Second).Seconds() {
+		log.Printf("worker %d: reached send timeout", s.workerId)
+		return true
+	}
+
+	return false
 }
 
 // it is time to commit if we have recently added one or more documents without committing and
@@ -104,9 +119,9 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 
 	// update state variables
 	s.solrDirty = true
-	// we reallocate it here so it does not grow unbounded
-	//s.addBuffer = s.addBuffer[:0]
-	s.addBuffer = make([]byte, 0, s.defaultBufferSize)
+
+	// clear the buffer and other state variables
+	s.addBuffer = s.addBuffer[:0]
 	s.pendingAdds = 0
 	s.lastAdd = time.Now()
 

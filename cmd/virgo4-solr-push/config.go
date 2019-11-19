@@ -17,6 +17,7 @@ type ServiceConfig struct {
 	SolrMode             string // the SOLR operation mode (add or delete)
 	SolrTimeout          int    // the http timeout (in seconds)
 	SolrBlockCount       uint   // the maximum number of Solr AddDocs in a buffer sent to SOLR
+	SolrBufferSize       uint   // the maximum size of the buffer sent to SOLR
 	SolrFlushTime        int    // how often to flush the AddDocs buffer
 	SolrCommitTime       int    // how often to do a SOLR commit if dirty (in seconds)
 	SolrCommitWithinTime int    // send SOLR a commit within after a document add (in seconds)
@@ -73,6 +74,7 @@ func LoadConfiguration() *ServiceConfig {
 	cfg.SolrMode = ensureSetAndNonEmpty("VIRGO4_SOLR_PUSH_SOLR_MODE")
 	cfg.SolrTimeout = envToInt("VIRGO4_SOLR_PUSH_SOLR_TIMEOUT")
 	cfg.SolrBlockCount = uint(envToInt("VIRGO4_SOLR_PUSH_SOLR_BLOCK_COUNT"))
+	cfg.SolrBufferSize = uint(envToInt("VIRGO4_SOLR_PUSH_SOLR_BUFFER_SIZE"))
 	cfg.SolrFlushTime = envToInt("VIRGO4_SOLR_PUSH_SOLR_FLUSH_TIME")
 	cfg.SolrCommitTime = envToInt("VIRGO4_SOLR_PUSH_SOLR_COMMIT_TIME")
 	cfg.SolrCommitWithinTime = envToInt("VIRGO4_SOLR_PUSH_SOLR_COMMIT_WITHIN_TIME")
@@ -89,6 +91,7 @@ func LoadConfiguration() *ServiceConfig {
 	log.Printf("[CONFIG] SolrMode             = [%s]", cfg.SolrMode)
 	log.Printf("[CONFIG] SolrTimeout          = [%d]", cfg.SolrTimeout)
 	log.Printf("[CONFIG] SolrBlockCount       = [%d]", cfg.SolrBlockCount)
+	log.Printf("[CONFIG] SolrBufferSize (MB)  = [%d]", cfg.SolrBufferSize)
 	log.Printf("[CONFIG] SolrFlushTime        = [%d]", cfg.SolrFlushTime)
 	log.Printf("[CONFIG] SolrCommitTime       = [%d]", cfg.SolrCommitTime)
 	log.Printf("[CONFIG] SolrCommitWithinTime = [%d]", cfg.SolrCommitWithinTime)
