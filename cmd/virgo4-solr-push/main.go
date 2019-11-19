@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/antchfx/xmlquery"
 	"log"
 	"os"
 	"time"
@@ -32,6 +33,10 @@ func main() {
 
 	// create the record channel
 	inboundMessageChan := make(chan awssqs.Message, cfg.WorkerQueueSize)
+
+	// in some cases, the xmlquery library is not thread safe so configure it not to
+	// use the cache feature which is one of the bits that is not thread safe.
+	xmlquery.DisableSelectorCache = true
 
 	// start workers here
 	for w := 1; w <= cfg.Workers; w++ {
