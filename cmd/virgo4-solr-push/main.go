@@ -7,10 +7,6 @@ import (
 	"time"
 
 	"github.com/uvalib/virgo4-sqs-sdk/awssqs"
-
-	// TEMP ONLY
-	"net/http"
-	_ "net/http/pprof"
 )
 
 //
@@ -42,9 +38,6 @@ func main() {
 	for w := 1; w <= cfg.Workers; w++ {
 		go worker(w, cfg, aws, inQueueHandle, inboundMessageChan)
 	}
-
-	// TEMP ONLY
-	go http.ListenAndServe(":8080", nil)
 
 	for {
 
