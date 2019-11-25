@@ -36,6 +36,12 @@ func (s *solrImpl) protocolCommit() error {
 	return nil
 }
 
+func (s *solrImpl) protocolPing() error {
+
+	_, err := s.httpGet( s.PingUrl )
+	return err
+}
+
 func (s *solrImpl) protocolAdd(buffer []byte) (uint, error) {
 
 	body, err := s.httpPost(buffer)
@@ -58,6 +64,55 @@ func (s *solrImpl) protocolAdd(buffer []byte) (uint, error) {
 
 	// all good
 	return 0, nil
+}
+
+func (s *solrImpl) httpGet(url string) ([]byte, error) {
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response *http.Response
+	count := 0
+	for {
+		response, err = s.httpClient.Do(req)
+
+		count++
+		if err != nil {
+			if s.canRetry(err) == false {
+				return nil, err
+			}
+
+			// break when tried too many times
+			if count >= maxHttpRetries {
+				return nil, err
+			}
+
+			log.Printf("ERROR: GET failed with error, retrying (%s)", err)
+
+			// sleep for a bit before retrying
+			time.Sleep(retrySleepTime)
+		} else {
+
+			defer response.Body.Close()
+
+			if response.StatusCode != http.StatusOK {
+				log.Printf("ERROR: GET failed with status %d", response.StatusCode)
+
+				body, _ := ioutil.ReadAll(response.Body)
+
+				return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
+			} else {
+				body, err := ioutil.ReadAll(response.Body)
+				if err != nil {
+					return nil, err
+				}
+
+				return body, nil
+			}
+		}
+	}
 }
 
 func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {

@@ -35,8 +35,7 @@ func (s *solrImpl) BufferDoc(doc []byte) error {
 }
 
 func (s *solrImpl) IsAlive() error {
-	//_, _, err := s.si.Ping()
-	return nil
+	return s.protocolPing()
 }
 
 func (s *solrImpl) IsTimeToAdd() bool {
