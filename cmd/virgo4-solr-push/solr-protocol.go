@@ -18,7 +18,8 @@ import (
 var maxHttpRetries = 3
 var retrySleepTime = 100 * time.Millisecond
 
-var ErrDocumentAdd = fmt.Errorf("document add failed")
+var ErrDocumentAdd = fmt.Errorf("single document add failed")
+var ErrAllDocumentAdd = fmt.Errorf("all document add failed")
 
 func (s *solrImpl) protocolCommit() error {
 
@@ -38,32 +39,49 @@ func (s *solrImpl) protocolCommit() error {
 
 func (s *solrImpl) protocolPing() error {
 
-	_, err := s.httpGet( s.PingUrl )
+	_, err := s.httpGet(s.PingUrl)
 	return err
 }
 
-func (s *solrImpl) protocolAdd(buffer []byte) (uint, error) {
+func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 
 	body, err := s.httpPost(buffer)
-	if err != nil {
-		return 0, err
-	}
 
-	_, docIx, err := s.processResponsePayload(body)
-	if err != nil {
+	switch err {
 
-		// one of the documents in the add list failed
-		if err == ErrDocumentAdd {
-			// special case here...
-			log.Printf("ERROR: add document at index %d FAILED", docIx)
-			return docIx, err
+	// no error, we need to look at the body to determine if there were specific document failures
+	case nil:
+
+		_, docNum, err := s.processResponsePayload(body)
+		if err != nil {
+
+			// one of the documents in the add list failed
+			if err == ErrDocumentAdd {
+				log.Printf("ERROR: add document number %d FAILED", docNum)
+				return docNum, err
+			}
+
+			return "", err
 		}
+		// all good
+		return "", nil
 
-		return 0, err
+	// all the adds failed, the body will tell us which document ID is the problem
+	case ErrAllDocumentAdd:
+
+		_, docNum, err := s.processResponsePayload(body)
+		if err != nil {
+			// all of the documents in the add list failed
+			if err == ErrAllDocumentAdd {
+				// special case here...
+				log.Printf("ERROR: all document rejected due to id %s", docNum)
+			}
+		}
+		return docNum, err
+
+	default:
+		return "", err
 	}
-
-	// all good
-	return 0, nil
 }
 
 func (s *solrImpl) httpGet(url string) ([]byte, error) {
@@ -97,20 +115,23 @@ func (s *solrImpl) httpGet(url string) ([]byte, error) {
 
 			defer response.Body.Close()
 
-			if response.StatusCode != http.StatusOK {
-				log.Printf("ERROR: GET failed with status %d", response.StatusCode)
+			body, err := ioutil.ReadAll(response.Body)
 
-				body, _ := ioutil.ReadAll(response.Body)
+			// happy day, hopefully all is well
+			if response.StatusCode == http.StatusOK {
 
-				return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
-			} else {
-				body, err := ioutil.ReadAll(response.Body)
+				// if the body read failed
 				if err != nil {
+					log.Printf("ERROR: body read failed (%s)", err)
 					return nil, err
 				}
 
 				return body, nil
 			}
+
+			log.Printf("ERROR: GET failed with status %d (%s)", response.StatusCode, body)
+
+			return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
 		}
 	}
 }
@@ -148,36 +169,45 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 
 			defer response.Body.Close()
 
-			if response.StatusCode != http.StatusOK {
-				log.Printf("ERROR: POST failed with status %d", response.StatusCode)
+			body, err := ioutil.ReadAll(response.Body)
 
-				body, _ := ioutil.ReadAll(response.Body)
+			// happy day, hopefully all is well
+			if response.StatusCode == http.StatusOK {
 
-				return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
-			} else {
-				body, err := ioutil.ReadAll(response.Body)
+				// if the body read failed
 				if err != nil {
+					log.Printf("ERROR: body read failed (%s)", err)
 					return nil, err
 				}
 
+				// everything went OK
 				return body, nil
+			}
+
+			log.Printf("ERROR: POST failed with status %d (%s)", response.StatusCode, body)
+
+			// this is a special case where SOLR rejects all documents
+			if response.StatusCode == http.StatusBadRequest {
+				return body, ErrAllDocumentAdd
+			} else {
+				return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
 			}
 		}
 	}
 }
 
-func (s *solrImpl) processResponsePayload(body []byte) (int, uint, error) {
+func (s *solrImpl) processResponsePayload(body []byte) (int, string, error) {
 
 	// generate a query structure from the body
 	doc, err := xmlquery.Parse(bytes.NewReader(body))
 	if err != nil {
-		return 0, 0, err
+		return 0, "", err
 	}
 
 	// attempt to extract the statusNode field
 	statusNode := xmlquery.FindOne(doc, "//response/lst[@name='responseHeader']/int[@name='status']")
 	if statusNode == nil {
-		return 0, 0, fmt.Errorf("cannot find status field in response payload (%s)", body)
+		return 0, "", fmt.Errorf("cannot find status field in response payload (%s)", body)
 	}
 
 	// if it appears that we have an error
@@ -189,22 +219,29 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, uint, error) {
 		messageNode := xmlquery.FindOne(doc, "//response/lst[@name='error']/str[@name='msg']")
 		if messageNode != nil {
 
-			// if this is an error on a specific document, we can extract that information
+			// if this is an error on a specific document number, we try to extract that information
 			re := regexp.MustCompile(`\[(\d+),\d+\]`)
 			match := re.FindStringSubmatch(messageNode.InnerText())
 			if match != nil {
-				fmt.Printf("%s", body)
-				docnum, _ := strconv.Atoi(match[1])
+				//fmt.Printf("%s", body)
+				// return the document number of failing item
+				return status, match[1], ErrDocumentAdd
+			}
 
-				// return index of failing item
-				return status, uint(docnum) - 1, ErrDocumentAdd
+			// if this is an error on a specific document id, we try to extract that information
+			re = regexp.MustCompile(`\[doc=(.+?)\]`)
+			match = re.FindStringSubmatch(messageNode.InnerText())
+			if match != nil {
+				//fmt.Printf("%s", body)
+				// return document id of failing item
+				return status, match[1], ErrAllDocumentAdd
 			}
 		}
-		return status, 0, fmt.Errorf("%s", body)
+		return status, "", fmt.Errorf("%s", body)
 	}
 
 	// all good
-	return 0, 0, nil
+	return 0, "", nil
 }
 
 // examines the error and decides if if can be retried

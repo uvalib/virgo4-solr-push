@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/uvalib/virgo4-sqs-sdk/awssqs"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -46,19 +47,39 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 		if solr.IsTimeToAdd() == true {
 
 			// add them
-			failedIx, err := solr.ForceAdd()
-			if err != nil && err != ErrDocumentAdd {
-				fatalIfError(err)
-			}
+			failedDoc, err := solr.ForceAdd()
 
-			// one of the documents failed to add
-			if err == ErrDocumentAdd {
+			switch err {
+
+			// no error, everything OK
+			case nil:
+				// delete all of them
+				err = batchDelete(id, aws, queue, queued)
+				fatalIfError(err)
+
+				// clear the queue
+				queued = queued[:0]
+
+			// one of the documents failed
+			case ErrDocumentAdd:
+
+				// convert the failed document number to a document index
+				failedIx, _ := strconv.Atoi(failedDoc)
+				failedIx--
 
 				// how many do we have total
-				sz := uint(len(queued))
+				sz := len(queued)
 
-				// if the failure document was not the last one
-				if failedIx < sz {
+				// if the failure document was the first one
+				if failedIx == 0 {
+
+					log.Printf("INFO: first document in batch of %d failed, ignoring it and requing the remainder", sz)
+
+					// ignore the one that failed and keep the remainder
+					queued = queued[failedIx+1:]
+
+					// if the failure document was not the last one
+				} else if failedIx < sz {
 
 					log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
 						failedIx-1, failedIx, failedIx+1, sz)
@@ -67,9 +88,10 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					err = batchDelete(id, aws, queue, queued[0:failedIx])
 					fatalIfError(err)
 
-					// ignore the one that failed and keep the remainder for the next
+					// ignore the one that failed and keep the remainder
 					queued = queued[failedIx+1:]
 
+					// the failure document was the last one
 				} else {
 					log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
 
@@ -80,14 +102,29 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					// clear the queue
 					queued = queued[:0]
 				}
-			} else {
 
-				// delete all of them
-				err = batchDelete(id, aws, queue, queued)
+			// all of the adds failed
+			case ErrAllDocumentAdd:
+				log.Printf("INFO: all documents failed due to id %s, removing and requing the remainder", failedDoc)
+
+				// iterate through and remove the bad item
+				for ix, m := range queued {
+					id, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
+					if id == failedDoc {
+						queued = append(queued[:ix], queued[ix+1:]...)
+						break
+					}
+				}
+
+			default:
 				fatalIfError(err)
+			}
 
-				// clear the queue
-				queued = queued[:0]
+			// re-buffer any that we need too be reprocessed
+			for _, m := range queued {
+				// buffer it to SOLR
+				err = solr.BufferDoc(m.Payload)
+				fatalIfError(err)
 			}
 		}
 

@@ -88,11 +88,11 @@ func (s *solrImpl) IsTimeToCommit() bool {
 	return time.Since(s.lastCommit).Seconds() > (time.Duration(s.Config.SolrCommitTime) * time.Second).Seconds()
 }
 
-func (s *solrImpl) ForceAdd() (uint, error) {
+func (s *solrImpl) ForceAdd() (string, error) {
 
 	// nothing to add
 	if s.pendingAdds == 0 {
-		return 0, nil
+		return "", nil
 	}
 
 	tag := fmt.Sprintf("</%s>", s.Config.SolrMode)
@@ -101,30 +101,67 @@ func (s *solrImpl) ForceAdd() (uint, error) {
 
 	// add to SOLR
 	start := time.Now()
-	failedIx, err := s.protocolAdd(s.addBuffer)
-
-	// fatal error
-	if err != nil && err != ErrDocumentAdd {
-		return 0, err
-	}
-
+	failedDoc, err := s.protocolAdd(s.addBuffer)
 	duration := time.Since(start)
-	log.Printf("worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds())
 
-	// only start timing for a SOLR commit after SOLR becomes dirty
-	if s.solrDirty == false {
-		s.lastCommit = time.Now()
+	switch err {
+
+	// no error
+	case nil:
+
+		log.Printf("worker %d: added %d documents in %0.2f seconds", s.workerId, s.pendingAdds, duration.Seconds())
+
+		// only start timing for a SOLR commit after SOLR becomes dirty
+		if s.solrDirty == false {
+			s.lastCommit = time.Now()
+		}
+
+		// update state variables
+		s.solrDirty = true
+
+		// clear the buffer and other state variables
+		s.addBuffer = s.addBuffer[:0]
+		s.pendingAdds = 0
+		s.lastAdd = time.Now()
+
+		return "", nil
+
+	// one of the documents added failed
+	case ErrDocumentAdd:
+
+		log.Printf("worker %d: added some documents in %0.2f seconds", s.workerId, duration.Seconds())
+
+		// only start timing for a SOLR commit after SOLR becomes dirty
+		if s.solrDirty == false {
+			s.lastCommit = time.Now()
+		}
+
+		// update state variables
+		s.solrDirty = true
+
+		// clear the buffer and other state variables
+		s.addBuffer = s.addBuffer[:0]
+		s.pendingAdds = 0
+		s.lastAdd = time.Now()
+
+		return failedDoc, ErrDocumentAdd
+
+	// all of the document adds failed
+	case ErrAllDocumentAdd:
+
+		log.Printf("worker %d: added no documents in %0.2f seconds", s.workerId, duration.Seconds())
+
+		// clear the buffer and other state variables
+		s.addBuffer = s.addBuffer[:0]
+		s.pendingAdds = 0
+		//s.lastAdd = time.Now()
+
+		return failedDoc, ErrAllDocumentAdd
+
+	// some other error, just return it
+	default:
+		return failedDoc, err
 	}
-
-	// update state variables
-	s.solrDirty = true
-
-	// clear the buffer and other state variables
-	s.addBuffer = s.addBuffer[:0]
-	s.pendingAdds = 0
-	s.lastAdd = time.Now()
-
-	return failedIx, err
 }
 
 func (s *solrImpl) ForceCommit() error {
