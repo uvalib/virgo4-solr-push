@@ -46,85 +46,109 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 		// check to see if it is time to 'add' these to SOLR
 		if solr.IsTimeToAdd() == true {
 
-			// add them
-			failedDoc, err := solr.ForceAdd()
+			// we loop here because we try to rebuffer and reprocess any documents that were not processed...
 
-			switch err {
+			for {
 
-			// no error, everything OK
-			case nil:
-				// delete all of them
-				err = batchDelete(id, aws, queue, queued)
-				fatalIfError(err)
+				// add them
+				failedDoc, err := solr.ForceAdd()
 
-				// clear the queue
-				queued = queued[:0]
+				switch err {
 
-			// one of the documents failed
-			case ErrDocumentAdd:
-
-				// convert the failed document number to a document index
-				failedIx, _ := strconv.Atoi(failedDoc)
-				failedIx--
-
-				// how many do we have total
-				sz := len(queued)
-
-				// if the failure document was the first one
-				if failedIx == 0 {
-
-					log.Printf("INFO: first document in batch of %d failed, ignoring it and requing the remainder", sz)
-
-					// ignore the one that failed and keep the remainder
-					queued = queued[failedIx+1:]
-
-					// if the failure document was not the last one
-				} else if failedIx < sz {
-
-					log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
-						failedIx-1, failedIx, failedIx+1, sz)
-
-					// delete the ones that succeeded
-					err = batchDelete(id, aws, queue, queued[0:failedIx])
-					fatalIfError(err)
-
-					// ignore the one that failed and keep the remainder
-					queued = queued[failedIx+1:]
-
-					// the failure document was the last one
-				} else {
-					log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
-
-					// delete all but the last of them of them
-					err = batchDelete(id, aws, queue, queued[0:sz])
+				// no error, everything OK
+				case nil:
+					// delete all of them
+					err = batchDelete(id, aws, queue, queued)
 					fatalIfError(err)
 
 					// clear the queue
 					queued = queued[:0]
-				}
 
-			// all of the adds failed
-			case ErrAllDocumentAdd:
-				log.Printf("INFO: all documents failed due to id %s, removing and requing the remainder", failedDoc)
+				// one of the documents failed
+				case ErrDocumentAdd:
 
-				// iterate through and remove the bad item
-				for ix, m := range queued {
-					id, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
-					if id == failedDoc {
-						queued = append(queued[:ix], queued[ix+1:]...)
-						break
+					// convert the failed document number to a document index
+					failedIx, _ := strconv.Atoi(failedDoc)
+					failedIx--
+
+					// how many do we have total
+					sz := len(queued)
+
+					// if the failure document was the first one
+					if failedIx == 0 {
+
+						log.Printf("INFO: first document in batch of %d failed, ignoring it and requing the remainder", sz)
+
+						// ignore the one that failed and keep the remainder
+						queued = queued[1:]
+
+						// if the failure document was not the last one
+					} else if failedIx < sz {
+
+						log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
+							failedIx-1, failedIx, failedIx+1, sz)
+
+						// delete the ones that succeeded
+						err = batchDelete(id, aws, queue, queued[0:failedIx])
+						fatalIfError(err)
+
+						// ignore the one that failed and keep the remainder
+						queued = queued[failedIx+1:]
+
+						// the failure document was the last one
+					} else {
+						log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
+
+						// delete all but the last of them of them
+						err = batchDelete(id, aws, queue, queued[0:sz])
+						fatalIfError(err)
+
+						// clear the queue
+						queued = queued[:0]
 					}
+
+				// all of the adds failed, handle both cases of error...
+				case ErrAllDocumentAdd:
+
+					log.Printf("WARNING: all documents failed due to id/doc number %s, removing and requing the remainder", failedDoc)
+
+					// a little bit of guesswork here
+					szBefore := len(queued)
+
+					// iterate through and remove the bad item
+					for ix, m := range queued {
+						id, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
+						if id == failedDoc {
+							queued = append(queued[:ix], queued[ix+1:]...)
+							break
+						}
+					}
+
+					// if we did not remove any items, lets assume that the failed doc is a document *number* instead of a document ID.
+					// remove that one from the list. When we are handling a ErrAllDocumentAdd error, the failed document number
+					// should *always* be 1 (the first document).
+
+					if len(queued) == szBefore && failedDoc == "1" {
+						queued = queued[1:]
+					} else {
+						log.Printf("ERROR: cannot locate id/doc number %s in our list", failedDoc)
+					}
+
+				default:
+					fatalIfError(err)
 				}
 
-			default:
-				fatalIfError(err)
-			}
+				// we have processed all the queued items, break out of the loop
+				if len(queued) == 0 {
+					break
+				}
 
-			// re-buffer any that we need too be reprocessed
-			for _, m := range queued {
-				// buffer it to SOLR
-				err = solr.BufferDoc(m.Payload)
-				fatalIfError(err)
+				// otherwise, re-buffer any that need too be reprocessed and try again
+				for _, m := range queued {
+					// buffer it to SOLR
+					err = solr.BufferDoc(m.Payload)
+					fatalIfError(err)
+				}
 			}
 		}
 

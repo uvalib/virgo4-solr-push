@@ -69,15 +69,11 @@ func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 	// all the adds failed, the body will tell us which document ID is the problem
 	case ErrAllDocumentAdd:
 
-		_, docNum, err := s.processResponsePayload(body)
-		if err != nil {
-			// all of the documents in the add list failed
-			if err == ErrAllDocumentAdd {
-				// special case here...
-				log.Printf("ERROR: all document rejected due to id %s", docNum)
-			}
-		}
-		return docNum, err
+		// we ignore the error from this call because we have already decided that all the documents have failed
+		_, docNum, _ := s.processResponsePayload(body)
+		// special case here...
+		log.Printf("WARNING: all document rejected due to id/doc number %s", docNum)
+		return docNum, ErrAllDocumentAdd
 
 	default:
 		return "", err
