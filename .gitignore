@@ -2,3 +2,5 @@
 tmp
 env.*
 bin
+package/scripts/build.ksh
+package/scripts/shell.ksh
