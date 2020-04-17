@@ -24,17 +24,17 @@ phases:
   build:
     commands:
       - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-default-solr-update
-      - terraform init
-      - terraform apply -auto-approve
+      - terraform init -no-color
+      - terraform apply -no-color -auto-approve
       - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-default-solr-delete
-      - terraform init
-      - terraform apply -auto-approve
+      - terraform init -no-color
+      - terraform apply -no-color -auto-approve
       - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-image-solr-update
-      - terraform init
-      - terraform apply -auto-approve
+      - terraform init -no-color
+      - terraform apply -no-color -auto-approve
       - cd $CODEBUILD_SRC_DIR/terraform-infrastructure/virgo4.lib.virginia.edu/ecs-tasks/staging/virgo4-image-solr-delete
-      - terraform init
-      - terraform apply -auto-approve
+      - terraform init -no-color
+      - terraform apply -no-color -auto-approve
 
 #  post_build:
 #    commands:
