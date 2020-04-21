@@ -51,7 +51,8 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 			for {
 
 				// add them
-				failedDoc, err := solr.ForceAdd()
+				var failedDoc string
+				failedDoc, err = solr.ForceAdd()
 
 				switch err {
 

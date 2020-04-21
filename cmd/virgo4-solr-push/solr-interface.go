@@ -1,5 +1,6 @@
 package main
 
+// SOLR - our SOLR interface
 type SOLR interface {
 	BufferDoc([]byte) error    // add a document to the buffer in preparation to send to SOLR
 	IsAlive() error            // is our endpoint alive?
@@ -9,7 +10,7 @@ type SOLR interface {
 	ForceCommit() error        // force a commit
 }
 
-// Initialize our SOLR connection
+// NewSolr - Initialize our SOLR connection
 func NewSolr(id int, config ServiceConfig) (SOLR, error) {
 
 	// mock implementation here if necessary

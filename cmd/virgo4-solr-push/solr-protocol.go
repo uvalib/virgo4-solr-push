@@ -52,7 +52,8 @@ func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 	// no error, we need to look at the body to determine if there were specific document failures
 	case nil:
 
-		_, docNum, err := s.processResponsePayload(body)
+		var docNum string
+		_, docNum, err = s.processResponsePayload(body)
 		if err != nil {
 
 			// one of the documents in the add list failed
