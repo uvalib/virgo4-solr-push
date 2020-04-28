@@ -33,7 +33,7 @@ func (s *solrImpl) protocolCommit() error {
 		return err
 	}
 
-	//log.Printf("SOLR commit...")
+	//log.Printf("worker %d: SOLR commit...", s.workerId )
 	return nil
 }
 
@@ -58,7 +58,7 @@ func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 
 			// one of the documents in the add list failed
 			if err == ErrDocumentAdd {
-				log.Printf("ERROR: add document number %d FAILED", docNum)
+				log.Printf("worker %d: ERROR add document number %s FAILED", s.workerId, docNum)
 				return docNum, err
 			}
 
@@ -73,7 +73,7 @@ func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 		// we ignore the error from this call because we have already decided that all the documents have failed
 		_, docNum, _ := s.processResponsePayload(body)
 		// special case here...
-		log.Printf("WARNING: all document rejected due to id/doc number %s", docNum)
+		log.Printf("worker %d: WARNING all document rejected due to id/doc number %s", s.workerId, docNum)
 		return docNum, ErrAllDocumentAdd
 
 	default:
@@ -104,7 +104,7 @@ func (s *solrImpl) httpGet(url string) ([]byte, error) {
 				return nil, err
 			}
 
-			log.Printf("ERROR: GET failed with error, retrying (%s)", err)
+			log.Printf("worker %d: ERROR GET failed with error, retrying (%s)", s.workerId, err)
 
 			// sleep for a bit before retrying
 			time.Sleep(retrySleepTime)
@@ -119,14 +119,14 @@ func (s *solrImpl) httpGet(url string) ([]byte, error) {
 
 				// if the body read failed
 				if err != nil {
-					log.Printf("ERROR: body read failed (%s)", err)
+					log.Printf("worker %d: ERROR read failed with error (%s)", s.workerId, err)
 					return nil, err
 				}
 
 				return body, nil
 			}
 
-			log.Printf("ERROR: GET failed with status %d (%s)", response.StatusCode, body)
+			log.Printf("worker %d: ERROR GET failed with status %d (%s)", s.workerId, response.StatusCode, body)
 
 			return body, fmt.Errorf("request returns HTTP %d", response.StatusCode)
 		}
@@ -158,7 +158,7 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 				return nil, err
 			}
 
-			log.Printf("WARNING: POST failed with error, retrying (%s)", err)
+			log.Printf("worker %d: WARNING POST failed with error, retrying (%s)", s.workerId, err)
 
 			// sleep for a bit before retrying
 			time.Sleep(retrySleepTime)
@@ -173,7 +173,7 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 
 				// if the body read failed
 				if err != nil {
-					log.Printf("ERROR: body read failed (%s)", err)
+					log.Printf("worker %d: ERROR read failed with error (%s)", s.workerId, err)
 					return nil, err
 				}
 
@@ -181,7 +181,7 @@ func (s *solrImpl) httpPost(buffer []byte) ([]byte, error) {
 				return body, nil
 			}
 
-			log.Printf("ERROR: POST failed with status %d (%s)", response.StatusCode, body)
+			log.Printf("worker %d: ERROR POST failed with status %d (%s)", s.workerId, response.StatusCode, body)
 
 			// this is a special case where SOLR rejects all documents
 			if response.StatusCode == http.StatusBadRequest {

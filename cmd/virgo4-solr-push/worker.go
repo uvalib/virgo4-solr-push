@@ -78,7 +78,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					// if the failure document was the first one
 					if failedIx == 0 {
 
-						log.Printf("INFO: first document in batch of %d failed, ignoring it and requing the remainder", sz)
+						log.Printf("worker %d: INFO first document in batch of %d failed, ignoring it and requing the remainder", id, sz)
 
 						// ignore the one that failed and keep the remainder
 						queued = queued[1:]
@@ -86,8 +86,8 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						// if the failure document was not the last one
 					} else if failedIx < sz {
 
-						log.Printf("INFO: purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
-							failedIx-1, failedIx, failedIx+1, sz)
+						log.Printf("worker %d: INFO purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
+							id, failedIx-1, failedIx, failedIx+1, sz)
 
 						// delete the ones that succeeded
 						err = batchDelete(id, aws, queue, queued[0:failedIx])
@@ -98,7 +98,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 
 						// the failure document was the last one
 					} else {
-						log.Printf("INFO: last document in batch of %d failed, ignoring it", sz)
+						log.Printf("worker %d: INFO last document in batch of %d failed, ignoring it", id, sz)
 
 						// delete all but the last of them of them
 						err = batchDelete(id, aws, queue, queued[0:sz])
@@ -111,7 +111,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 				// all of the adds failed, handle both cases of error...
 				case ErrAllDocumentAdd:
 
-					log.Printf("WARNING: all documents failed due to id/doc number %s, removing and requing the remainder", failedDoc)
+					log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, removing and requing the remainder", id, failedDoc)
 
 					// a little bit of guesswork here
 					szBefore := len(queued)
@@ -132,7 +132,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					if len(queued) == szBefore && failedDoc == "1" {
 						queued = queued[1:]
 					} else {
-						log.Printf("ERROR: cannot locate id/doc number %s in our list", failedDoc)
+						log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list", id, failedDoc)
 					}
 
 				default:
@@ -169,7 +169,7 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 		return nil
 	}
 
-	//log.Printf( "About to delete block of %d", count )
+	//log.Printf( "worker %d: About to delete block of %d", id, count )
 
 	start := time.Now()
 
@@ -184,10 +184,10 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 		start := bix * awssqs.MAX_SQS_BLOCK_COUNT
 		end := start + awssqs.MAX_SQS_BLOCK_COUNT
 
-		//log.Printf( "Deleting slice [%d:%d]", start, end )
+		//log.Printf( "worker %d: Deleting slice [%d:%d]", id, start, end )
 
 		// and delete them
-		err := blockDelete(aws, queue, messages[start:end])
+		err := blockDelete(id, aws, queue, messages[start:end])
 		if err != nil {
 			return err
 		}
@@ -200,10 +200,10 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 		start := fullBlocks * awssqs.MAX_SQS_BLOCK_COUNT
 		end := start + remainder
 
-		//log.Printf( "Deleting slice [%d:%d]", start, end )
+		//log.Printf( "worker %d: Deleting slice [%d:%d]", id, start, end )
 
 		// and delete them
-		err := blockDelete(aws, queue, messages[start:end])
+		err := blockDelete(id, aws, queue, messages[start:end])
 		if err != nil {
 			return err
 		}
@@ -215,7 +215,7 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 	return nil
 }
 
-func blockDelete(aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
+func blockDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
 
 	// delete the block
 	opStatus, err := aws.BatchMessageDelete(queue, messages)
@@ -229,7 +229,7 @@ func blockDelete(aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs
 	if err == awssqs.ErrOneOrMoreOperationsUnsuccessful {
 		for ix, op := range opStatus {
 			if op == false {
-				log.Printf("ERROR: message %d failed to delete", ix)
+				log.Printf("worker %d: ERROR message %d failed to delete", id, ix)
 			}
 		}
 	}
