@@ -57,7 +57,7 @@ func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 		if err != nil {
 
 			// one of the documents in the add list failed
-			if err == ErrDocumentAdd {
+			if err == ErrDocumentAdd && len(docNum) != 0 {
 				log.Printf("worker %d: ERROR add document number %s FAILED", s.workerId, docNum)
 				return docNum, err
 			}
@@ -72,8 +72,9 @@ func (s *solrImpl) protocolAdd(buffer []byte) (string, error) {
 
 		// we ignore the error from this call because we have already decided that all the documents have failed
 		_, docNum, _ := s.processResponsePayload(body)
-		// special case here...
-		log.Printf("worker %d: WARNING all document rejected due to id/doc number %s", s.workerId, docNum)
+		if len(docNum) != 0 {
+			log.Printf("worker %d: WARNING all documents rejected due to id/doc number %s", s.workerId, docNum)
+		}
 		return docNum, ErrAllDocumentAdd
 
 	default:
@@ -217,6 +218,7 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, string, error) {
 		if messageNode != nil {
 
 			// if this is an error on a specific document number, we try to extract that information
+
 			re := regexp.MustCompile(`\[(\d+),\d+\]`)
 			match := re.FindStringSubmatch(messageNode.InnerText())
 			if match != nil {
@@ -226,6 +228,10 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, string, error) {
 			}
 
 			// if this is an error on a specific document id, we try to extract that information
+
+			// an example error looks like this
+			// <str name="msg">ERROR: [doc=as:3r617] Error adding field 'published_date'='1969' msg=Invalid Date String:'1969'</str>
+			//
 			re = regexp.MustCompile(`\[doc=(.+?)\]`)
 			match = re.FindStringSubmatch(messageNode.InnerText())
 			if match != nil {
@@ -233,7 +239,22 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, string, error) {
 				// return document id of failing item
 				return status, match[1], ErrAllDocumentAdd
 			}
+
+			// kinda ad-hoc looking for other error cases
+
+			// an example error looks like this
+			// <str name="msg">Exception writing document id as:3r617 to the index; possible analysis error: DocValuesField "sc_availability_stored" is too large, must be &lt;= 32766</str>
+			//
+			re = regexp.MustCompile(`document id (.+?)`)
+			match = re.FindStringSubmatch(messageNode.InnerText())
+			if match != nil {
+				//fmt.Printf("%s", body)
+				// return document id of failing item
+				return status, match[1], ErrAllDocumentAdd
+			}
+
 		}
+		log.Printf("ERROR extracting id/doc number from payload, please review the extract code and implement support for this error case")
 		return status, "", fmt.Errorf("%s", body)
 	}
 

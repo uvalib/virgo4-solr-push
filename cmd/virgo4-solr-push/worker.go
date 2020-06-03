@@ -108,31 +108,42 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						queued = queued[:0]
 					}
 
-				// all of the adds failed, handle both cases of error...
+				// all of the adds failed, attempt to handle as best we can...
 				case ErrAllDocumentAdd:
 
-					log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, removing and requing the remainder", id, failedDoc)
+					// if we were able to identify the document that failed then we might be able to handle
+					// things in a sensible manner. If we cannot, its all over
 
-					// a little bit of guesswork here
-					szBefore := len(queued)
+					if len(failedDoc) != 0 {
 
-					// iterate through and remove the bad item
-					for ix, m := range queued {
-						id, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
-						if id == failedDoc {
-							queued = append(queued[:ix], queued[ix+1:]...)
-							break
+						log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, removing and requing the remainder", id, failedDoc)
+
+						// iterate through and remove the bad item
+						failedItemRemoved := false
+						for ix, m := range queued {
+							id, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
+							if id == failedDoc {
+								queued = append(queued[:ix], queued[ix+1:]...)
+								failedItemRemoved = true
+								break
+							}
 						}
-					}
 
-					// if we did not remove any items, lets assume that the failed doc is a document *number* instead of a document ID.
-					// remove that one from the list. When we are handling a ErrAllDocumentAdd error, the failed document number
-					// should *always* be 1 (the first document).
+						// if we did not remove any items, lets assume that the failed doc is a document *number* instead of a document ID.
+						// remove that one from the list. When we are handling a ErrAllDocumentAdd error, the failed document number
+						// should *always* be 1 (the first document).
 
-					if len(queued) == szBefore && failedDoc == "1" {
-						queued = queued[1:]
+						if failedItemRemoved == false && failedDoc == "1" {
+							queued = queued[1:]
+						} else {
+							log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list, abandoning buffered items", id, failedDoc)
+							// clear the queue
+							queued = queued[:0]
+						}
 					} else {
-						log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list", id, failedDoc)
+						log.Printf("worker %d: ERROR cannot determine id/doc number from the reported failure, abandoning buffered items", id)
+						// clear the queue
+						queued = queued[:0]
 					}
 
 				default:
