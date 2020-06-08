@@ -245,7 +245,7 @@ func (s *solrImpl) processResponsePayload(body []byte) (int, string, error) {
 			// an example error looks like this
 			// <str name="msg">Exception writing document id as:3r617 to the index; possible analysis error: DocValuesField "sc_availability_stored" is too large, must be &lt;= 32766</str>
 			//
-			re = regexp.MustCompile(`document id (.+?)`)
+			re = regexp.MustCompile(`document id (\S*)`)
 			match = re.FindStringSubmatch(messageNode.InnerText())
 			if match != nil {
 				//fmt.Printf("%s", body)
