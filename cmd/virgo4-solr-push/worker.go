@@ -112,7 +112,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 				case ErrAllDocumentAdd:
 
 					// if we were able to identify the document that failed then we might be able to handle
-					// things in a sensible manner. If we cannot, its all over
+					// things in a sensible manner. If we cannot, it's all over
 
 					if len(failedDoc) != 0 {
 
@@ -121,8 +121,9 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						// iterate through and remove the bad item
 						failedItemRemoved := false
 						for ix, m := range queued {
-							id, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
-							if id == failedDoc {
+							recId, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
+							if recId == failedDoc {
+								log.Printf("worker %d: INFO removed id/doc number %s, requing the remainder", id, failedDoc)
 								queued = append(queued[:ix], queued[ix+1:]...)
 								failedItemRemoved = true
 								break
@@ -133,12 +134,16 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						// remove that one from the list. When we are handling a ErrAllDocumentAdd error, the failed document number
 						// should *always* be 1 (the first document).
 
-						if failedItemRemoved == false && failedDoc == "1" {
-							queued = queued[1:]
-						} else {
-							log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list, abandoning buffered items", id, failedDoc)
-							// clear the queue
-							queued = queued[:0]
+						if failedItemRemoved == false {
+
+							if failedDoc == "1" {
+								log.Printf("worker %d: INFO removed first doc in list, requing the remainder", id)
+								queued = queued[1:]
+							} else {
+								log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list, abandoning buffered items", id, failedDoc)
+								// clear the queue
+								queued = queued[:0]
+							}
 						}
 					} else {
 						log.Printf("worker %d: ERROR cannot determine id/doc number from the reported failure, abandoning buffered items", id)
