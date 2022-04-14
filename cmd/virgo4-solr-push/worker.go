@@ -78,7 +78,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					// if the failure document was the first one
 					if failedIx == 0 {
 
-						log.Printf("worker %d: INFO first document in batch of %d failed, ignoring it and requing the remainder", id, sz)
+						log.Printf("worker %d: WARNING first document in batch of %d failed, ignoring it and requing the remainder", id, sz)
 
 						// ignore the one that failed and keep the remainder
 						queued = queued[1:]
@@ -86,7 +86,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						// if the failure document was not the last one
 					} else if failedIx < sz {
 
-						log.Printf("worker %d: INFO purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
+						log.Printf("worker %d: WARNING purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
 							id, failedIx-1, failedIx, failedIx+1, sz)
 
 						// delete the ones that succeeded
@@ -98,7 +98,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 
 						// the failure document was the last one
 					} else {
-						log.Printf("worker %d: INFO last document in batch of %d failed, ignoring it", id, sz)
+						log.Printf("worker %d: WARNING last document in batch of %d failed, ignoring it", id, sz)
 
 						// delete all but the last of them of them
 						err = batchDelete(id, aws, queue, queued[0:sz])
@@ -116,14 +116,14 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 
 					if len(failedDoc) != 0 {
 
-						log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, removing and requing the remainder", id, failedDoc)
+						log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, attempting to recover", id, failedDoc)
 
 						// iterate through and remove the bad item
 						failedItemRemoved := false
 						for ix, m := range queued {
 							recId, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
 							if recId == failedDoc {
-								log.Printf("worker %d: INFO removed id/doc number %s, requing the remainder", id, failedDoc)
+								log.Printf("worker %d: WARNING removed id/doc number %s, requing the remainder", id, failedDoc)
 								queued = append(queued[:ix], queued[ix+1:]...)
 								failedItemRemoved = true
 								break
@@ -137,16 +137,16 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						if failedItemRemoved == false {
 
 							if failedDoc == "1" {
-								log.Printf("worker %d: INFO removed first doc in list, requing the remainder", id)
+								log.Printf("worker %d: WARNING removed first doc in list, requing the remainder", id)
 								queued = queued[1:]
 							} else {
-								log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list, abandoning buffered items", id, failedDoc)
+								log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list, abandoning all buffered items", id, failedDoc)
 								// clear the queue
 								queued = queued[:0]
 							}
 						}
 					} else {
-						log.Printf("worker %d: ERROR cannot determine id/doc number from the reported failure, abandoning buffered items", id)
+						log.Printf("worker %d: ERROR cannot determine id/doc number from the reported failure, abandoning all buffered items", id)
 						// clear the queue
 						queued = queued[:0]
 					}
