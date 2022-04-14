@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// ServiceConfig defines all of the service configuration parameters
+// ServiceConfig defines the service configuration parameters
 type ServiceConfig struct {
 	InQueueName       string // SQS queue name for inbound documents
 	PollTimeOut       int64  // the SQS queue timeout (in seconds)
@@ -24,6 +24,22 @@ type ServiceConfig struct {
 
 	WorkerQueueSize int // the inbound message queue size to feed the workers
 	Workers         int // the number of worker processes
+
+	SubDocIdDelimiter string // in cases where we are pushing AddDoc's containing sub-documents
+	// failures in sub-documents will be reported therefor we need a way to
+	// extract the parent document ID from the sub-document ID. For Mandala,
+	// this is done with a special delimiter
+}
+
+func envWithDefault(env string, defaultValue string) string {
+	val, set := os.LookupEnv(env)
+
+	if set == false {
+		log.Printf("INFO: environment variable not set: [%s] using default value [%s]", env, defaultValue)
+		return defaultValue
+	}
+
+	return val
 }
 
 func ensureSet(env string) string {
@@ -82,6 +98,8 @@ func LoadConfiguration() *ServiceConfig {
 	cfg.WorkerQueueSize = envToInt("VIRGO4_SOLR_PUSH_WORK_QUEUE_SIZE")
 	cfg.Workers = envToInt("VIRGO4_SOLR_PUSH_WORKERS")
 
+	cfg.SubDocIdDelimiter = envWithDefault("SOLR_PUSH_SUBDOC_ID_DELIMITER", "")
+
 	log.Printf("[CONFIG] InQueueName          = [%s]", cfg.InQueueName)
 	log.Printf("[CONFIG] PollTimeOut          = [%d]", cfg.PollTimeOut)
 	log.Printf("[CONFIG] MessageBucketName    = [%s]", cfg.MessageBucketName)
@@ -98,6 +116,7 @@ func LoadConfiguration() *ServiceConfig {
 
 	log.Printf("[CONFIG] WorkerQueueSize      = [%d]", cfg.WorkerQueueSize)
 	log.Printf("[CONFIG] Workers              = [%d]", cfg.Workers)
+	log.Printf("[CONFIG] SubDocIdDelimiter    = [%s]", cfg.SubDocIdDelimiter)
 
 	if cfg.SolrCommitTime == 0 {
 		log.Printf("INFO: commit time is zero, explicit SOLR commits are DISABLED!!")

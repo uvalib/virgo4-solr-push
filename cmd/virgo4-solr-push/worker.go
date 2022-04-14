@@ -4,6 +4,7 @@ import (
 	"github.com/uvalib/virgo4-sqs-sdk/awssqs"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -117,6 +118,16 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					if len(failedDoc) != 0 {
 
 						log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, attempting to recover", id, failedDoc)
+
+						// if we are configured for sub-document delimiters, this might be a sub-document id so
+						// attempt to extract the parent document id so we can remove it from the block
+						if len(config.SubDocIdDelimiter) != 0 {
+							parentID := strings.Split(failedDoc, config.SubDocIdDelimiter)
+							if parentID[0] != failedDoc {
+								failedDoc = parentID[0]
+								log.Printf("worker %d: WARNING extracted parent id (%s) from id/doc number, looks like a sub-document failure ", id, failedDoc)
+							}
+						}
 
 						// iterate through and remove the bad item
 						failedItemRemoved := false
