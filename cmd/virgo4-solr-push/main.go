@@ -9,9 +9,7 @@ import (
 	"github.com/uvalib/virgo4-sqs-sdk/awssqs"
 )
 
-//
 // main entry point
-//
 func main() {
 
 	log.Printf("===> %s service staring up (version: %s) <===", os.Args[0], Version())
@@ -45,7 +43,15 @@ func main() {
 
 		// wait for a batch of messages
 		messages, err := aws.BatchMessageGet(inQueueHandle, awssqs.MAX_SQS_BLOCK_COUNT, time.Duration(cfg.PollTimeOut)*time.Second)
-		fatalIfError(err)
+		if err != nil {
+			log.Printf("ERROR: during message get (%s), sleeping and retrying", err.Error())
+
+			// sleep for a while
+			time.Sleep(1 * time.Second)
+
+			// and try again
+			continue
+		}
 
 		// did we receive any?
 		sz := len(messages)
