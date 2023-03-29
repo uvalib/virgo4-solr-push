@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
-func (s *solrImpl) BufferDoc(doc []byte) error {
+func (s *solrImpl) BufferDoc(id string, doc []byte) error {
 
 	// if we have not yet added any documents
 	if s.pendingAdds == 0 {
@@ -27,8 +28,9 @@ func (s *solrImpl) BufferDoc(doc []byte) error {
 		s.lastAdd = time.Now()
 	}
 
-	// add the document and update the document count
+	// add the document and the identifier (for logging) and update the document count
 	s.addBuffer = append(s.addBuffer, doc...)
+	s.pendingAddIds = append(s.pendingAddIds, id)
 	s.pendingAdds++
 
 	return nil
@@ -98,6 +100,7 @@ func (s *solrImpl) ForceAdd() (string, error) {
 	tag := fmt.Sprintf("</%s>", s.Config.SolrMode)
 	s.addBuffer = append(s.addBuffer, []byte(tag)...)
 	log.Printf("worker %d: sending %d documents to SOLR (buffer %d bytes)", s.workerId, s.pendingAdds, len(s.addBuffer))
+	log.Printf("worker %d: ids: %s", s.workerId, strings.Join(s.pendingAddIds, " "))
 
 	// add to SOLR
 	start := time.Now()
@@ -121,6 +124,7 @@ func (s *solrImpl) ForceAdd() (string, error) {
 
 		// clear the buffer and other state variables
 		s.addBuffer = s.addBuffer[:0]
+		s.pendingAddIds = s.pendingAddIds[:0]
 		s.pendingAdds = 0
 		s.lastAdd = time.Now()
 
@@ -141,18 +145,20 @@ func (s *solrImpl) ForceAdd() (string, error) {
 
 		// clear the buffer and other state variables
 		s.addBuffer = s.addBuffer[:0]
+		s.pendingAddIds = s.pendingAddIds[:0]
 		s.pendingAdds = 0
 		s.lastAdd = time.Now()
 
 		return failedDoc, ErrDocumentAdd
 
-	// all of the document adds failed
+	// all the document adds failed
 	case ErrAllDocumentAdd:
 
 		log.Printf("worker %d: added no documents in %0.2f seconds", s.workerId, duration.Seconds())
 
 		// clear the buffer and other state variables
 		s.addBuffer = s.addBuffer[:0]
+		s.pendingAddIds = s.pendingAddIds[:0]
 		s.pendingAdds = 0
 		//s.lastAdd = time.Now()
 

@@ -19,6 +19,7 @@ type solrImpl struct {
 	lastAdd        time.Time // when we did our last add to SOLR
 	solrDirty      bool      // we have added documents to SOLR without committing
 	pendingAdds    uint      // how many documents in the add buffer
+	pendingAddIds  []string  // our document add buffer
 	addBuffer      []byte    // our document add buffer
 	sendBufferSize uint      // the default document add buffer size
 

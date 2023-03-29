@@ -11,10 +11,10 @@ import (
 // time to wait for inbound messages before doing something else
 var waitTimeout = 5 * time.Second
 
-func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, inbound <-chan awssqs.Message) {
+func worker(workerId int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, inbound <-chan awssqs.Message) {
 
 	// create our SOLR instance
-	solr, err := NewSolr(id, *config)
+	solr, err := NewSolr(workerId, *config)
 	fatalIfError(err)
 
 	// keep a list of the messages queued so we can delete them once they are sent to SOLR
@@ -36,8 +36,15 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 		// we have an inbound message to process
 		if arrived == true {
 
+			// get the message identifier
+			id, found := message.GetAttribute(awssqs.AttributeKeyRecordId)
+			if found == false {
+				id = "unknown"
+				log.Printf("WARNING: cannot locate document id, using default")
+			}
+
 			// buffer it to SOLR
-			err = solr.BufferDoc(message.Payload)
+			err = solr.BufferDoc(id, message.Payload)
 			fatalIfError(err)
 
 			// add it to the queued list
@@ -60,7 +67,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 				// no error, everything OK
 				case nil:
 					// delete all of them
-					err = batchDelete(id, aws, queue, queued)
+					err = batchDelete(workerId, aws, queue, queued)
 					fatalIfError(err)
 
 					// clear the queue
@@ -79,7 +86,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					// if the failure document was the first one
 					if failedIx == 0 {
 
-						log.Printf("worker %d: WARNING first document in batch of %d failed, ignoring it and requing the remainder", id, sz)
+						log.Printf("worker %d: WARNING first document in batch of %d failed, ignoring it and requing the remainder", workerId, sz)
 
 						// ignore the one that failed and keep the remainder
 						queued = queued[1:]
@@ -88,10 +95,10 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					} else if failedIx < sz {
 
 						log.Printf("worker %d: WARNING purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
-							id, failedIx-1, failedIx, failedIx+1, sz)
+							workerId, failedIx-1, failedIx, failedIx+1, sz)
 
 						// delete the ones that succeeded
-						err = batchDelete(id, aws, queue, queued[0:failedIx])
+						err = batchDelete(workerId, aws, queue, queued[0:failedIx])
 						fatalIfError(err)
 
 						// ignore the one that failed and keep the remainder
@@ -99,10 +106,10 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 
 						// the failure document was the last one
 					} else {
-						log.Printf("worker %d: WARNING last document in batch of %d failed, ignoring it", id, sz)
+						log.Printf("worker %d: WARNING last document in batch of %d failed, ignoring it", workerId, sz)
 
 						// delete all but the last of them of them
-						err = batchDelete(id, aws, queue, queued[0:sz])
+						err = batchDelete(workerId, aws, queue, queued[0:sz])
 						fatalIfError(err)
 
 						// clear the queue
@@ -117,15 +124,15 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 
 					if len(failedDoc) != 0 {
 
-						log.Printf("worker %d: WARNING all documents failed due to id/doc number %s, attempting to recover", id, failedDoc)
+						log.Printf("worker %d: WARNING all documents failed due to workerId/doc number %s, attempting to recover", workerId, failedDoc)
 
-						// if we are configured for sub-document delimiters, this might be a sub-document id so
-						// attempt to extract the parent document id so we can remove it from the block
+						// if we are configured for sub-document delimiters, this might be a sub-document workerId so
+						// attempt to extract the parent document workerId so we can remove it from the block
 						if len(config.SubDocIdDelimiter) != 0 {
 							parentID := strings.Split(failedDoc, config.SubDocIdDelimiter)
 							if parentID[0] != failedDoc {
 								failedDoc = parentID[0]
-								log.Printf("worker %d: WARNING extracted parent id (%s) from id/doc number, looks like a sub-document failure ", id, failedDoc)
+								log.Printf("worker %d: WARNING extracted parent workerId (%s) from workerId/doc number, looks like a sub-document failure ", workerId, failedDoc)
 							}
 						}
 
@@ -134,7 +141,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						for ix, m := range queued {
 							recId, _ := m.GetAttribute(awssqs.AttributeKeyRecordId)
 							if recId == failedDoc {
-								log.Printf("worker %d: WARNING removed id/doc number %s, requing the remainder", id, failedDoc)
+								log.Printf("worker %d: WARNING removed workerId/doc number %s, requing the remainder", workerId, failedDoc)
 								queued = append(queued[:ix], queued[ix+1:]...)
 								failedItemRemoved = true
 								break
@@ -148,16 +155,16 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 						if failedItemRemoved == false {
 
 							if failedDoc == "1" {
-								log.Printf("worker %d: WARNING removed first doc in list, requing the remainder", id)
+								log.Printf("worker %d: WARNING removed first doc in list, requing the remainder", workerId)
 								queued = queued[1:]
 							} else {
-								log.Printf("worker %d: ERROR cannot locate id/doc number %s in our list, abandoning all buffered items", id, failedDoc)
+								log.Printf("worker %d: ERROR cannot locate workerId/doc number %s in our list, abandoning all buffered items", workerId, failedDoc)
 								// clear the queue
 								queued = queued[:0]
 							}
 						}
 					} else {
-						log.Printf("worker %d: ERROR cannot determine id/doc number from the reported failure, abandoning all buffered items", id)
+						log.Printf("worker %d: ERROR cannot determine workerId/doc number from the reported failure, abandoning all buffered items", workerId)
 						// clear the queue
 						queued = queued[:0]
 					}
@@ -171,10 +178,17 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 					break
 				}
 
-				// otherwise, re-buffer any that need too be reprocessed and try again
+				// otherwise, re-buffer any that need to be reprocessed and try again
 				for _, m := range queued {
+					// get the message identifier
+					id, found := m.GetAttribute(awssqs.AttributeKeyRecordId)
+					if found == false {
+						id = "unknown"
+						log.Printf("WARNING: cannot locate document id, using default")
+					}
+
 					// buffer it to SOLR
-					err = solr.BufferDoc(m.Payload)
+					err = solr.BufferDoc(id, m.Payload)
 					fatalIfError(err)
 				}
 			}
@@ -188,7 +202,7 @@ func worker(id int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssqs.Queu
 	}
 }
 
-func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
+func batchDelete(workerId int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
 
 	// ensure there is work to do
 	count := uint(len(messages))
@@ -196,7 +210,7 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 		return nil
 	}
 
-	//log.Printf( "worker %d: About to delete block of %d", id, count )
+	//log.Printf( "worker %d: About to delete block of %d", workerId, count )
 
 	start := time.Now()
 
@@ -211,10 +225,10 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 		start := bix * awssqs.MAX_SQS_BLOCK_COUNT
 		end := start + awssqs.MAX_SQS_BLOCK_COUNT
 
-		//log.Printf( "worker %d: Deleting slice [%d:%d]", id, start, end )
+		//log.Printf( "worker %d: Deleting slice [%d:%d]", workerId, start, end )
 
 		// and delete them
-		err := blockDelete(id, aws, queue, messages[start:end])
+		err := blockDelete(workerId, aws, queue, messages[start:end])
 		if err != nil {
 			return err
 		}
@@ -227,22 +241,22 @@ func batchDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 		start := fullBlocks * awssqs.MAX_SQS_BLOCK_COUNT
 		end := start + remainder
 
-		//log.Printf( "worker %d: Deleting slice [%d:%d]", id, start, end )
+		//log.Printf( "worker %d: Deleting slice [%d:%d]", workerId, start, end )
 
 		// and delete them
-		err := blockDelete(id, aws, queue, messages[start:end])
+		err := blockDelete(workerId, aws, queue, messages[start:end])
 		if err != nil {
 			return err
 		}
 	}
 
 	duration := time.Since(start)
-	log.Printf("worker %d: batch delete completed in %0.2f seconds", id, duration.Seconds())
+	log.Printf("worker %d: batch delete completed in %0.2f seconds", workerId, duration.Seconds())
 
 	return nil
 }
 
-func blockDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
+func blockDelete(workerId int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages []awssqs.Message) error {
 
 	// delete the block
 	opStatus, err := aws.BatchMessageDelete(queue, messages)
@@ -256,7 +270,7 @@ func blockDelete(id int, aws awssqs.AWS_SQS, queue awssqs.QueueHandle, messages 
 	if err == awssqs.ErrOneOrMoreOperationsUnsuccessful {
 		for ix, op := range opStatus {
 			if op == false {
-				log.Printf("worker %d: ERROR message %d failed to delete", id, ix)
+				log.Printf("worker %d: ERROR message %d failed to delete", workerId, ix)
 			}
 		}
 	}
