@@ -95,7 +95,7 @@ func worker(workerId int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssq
 					} else if failedIx < sz {
 
 						log.Printf("worker %d: WARNING purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
-							workerId, failedIx-1, failedIx, failedIx+1, sz)
+							workerId, failedIx-1, failedIx, failedIx+1, sz-1)
 
 						// delete the ones that succeeded
 						err = batchDelete(workerId, aws, queue, queued[0:failedIx])
