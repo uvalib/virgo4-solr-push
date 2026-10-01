@@ -83,16 +83,24 @@ func worker(workerId int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssq
 					// how many do we have total
 					sz := len(queued)
 
-					// if the failure document was the first one
-					if failedIx == 0 {
+					// if the failure document number is out of range we cannot tell which documents were added
+					if failedIx < 0 || failedIx >= sz {
+
+						log.Printf("worker %d: ERROR failed document number %s is out of range for batch of %d, abandoning all buffered items", workerId, failedDoc, sz)
+
+						// clear the queue
+						queued = queued[:0]
+
+						// if the failure document was the first one
+					} else if failedIx == 0 {
 
 						log.Printf("worker %d: WARNING first document in batch of %d failed, ignoring it and requing the remainder", workerId, sz)
 
 						// ignore the one that failed and keep the remainder
 						queued = queued[1:]
 
-						// if the failure document was not the last one
-					} else if failedIx < sz {
+						// otherwise delete the ones before the failure document
+					} else {
 
 						log.Printf("worker %d: WARNING purging documents 0 - %d, ignoring document %d, requeuing %d - %d",
 							workerId, failedIx-1, failedIx, failedIx+1, sz-1)
@@ -103,17 +111,6 @@ func worker(workerId int, config *ServiceConfig, aws awssqs.AWS_SQS, queue awssq
 
 						// ignore the one that failed and keep the remainder
 						queued = queued[failedIx+1:]
-
-						// the failure document was the last one
-					} else {
-						log.Printf("worker %d: WARNING last document in batch of %d failed, ignoring it", workerId, sz)
-
-						// delete all but the last of them of them
-						err = batchDelete(workerId, aws, queue, queued[0:sz])
-						fatalIfError(err)
-
-						// clear the queue
-						queued = queued[:0]
 					}
 
 				// all of the adds failed, attempt to handle as best we can...
