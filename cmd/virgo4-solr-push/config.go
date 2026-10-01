@@ -46,7 +46,7 @@ func ensureSet(env string) string {
 	val, set := os.LookupEnv(env)
 
 	if set == false {
-		log.Printf("environment variable not set: [%s]", env)
+		log.Printf("INFO: environment variable not set: [%s]", env)
 		os.Exit(1)
 	}
 
@@ -57,7 +57,7 @@ func ensureSetAndNonEmpty(env string) string {
 	val := ensureSet(env)
 
 	if val == "" {
-		log.Printf("environment variable not set: [%s]", env)
+		log.Printf("INFO: environment variable is empty: [%s]", env)
 		os.Exit(1)
 	}
 
@@ -69,7 +69,7 @@ func envToInt(env string) int {
 	number := ensureSetAndNonEmpty(env)
 	n, err := strconv.Atoi(number)
 	if err != nil {
-
+		log.Printf("INFO: environment variable is not a valid integer: [%s] = [%s]", env, number)
 		os.Exit(1)
 	}
 	return n
